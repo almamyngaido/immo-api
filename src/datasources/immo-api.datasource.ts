@@ -1,15 +1,13 @@
 import {inject, lifeCycleObserver, LifeCycleObserver} from '@loopback/core';
 import {juggler} from '@loopback/repository';
 
+
 const config = {
-  name: 'immoApi',
+  name: 'cartoDataSource',
   connector: 'mongodb',
-  url: '',
-  host: '',
-  port: 0,
-  user: '',
-  password: '',
-  database: '',
+  url: 'mongodb://127.0.0.1:27017',
+  // url: 'mongodb://10.20.1.68:30017', // Your MongoDB connection string
+  database: 'immo-db',
   useNewUrlParser: true
 };
 
