@@ -10,3 +10,6 @@ export * from './utilisateur-panier.controller';
 export * from './panier-utilisateur.controller';
 export * from './utilisateur-bien-immo.controller';
 export * from './bien-immo-utilisateur.controller';
+export * from './bien-immo-media.controller';
+export * from './media-bien-immo.controller';
+export * from './media.controller';

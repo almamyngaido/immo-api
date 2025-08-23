@@ -26,26 +26,35 @@ export class PanierController {
     public panierRepository : PanierRepository,
   ) {}
 
-  @post('/paniers')
-  @response(200, {
-    description: 'Panier model instance',
-    content: {'application/json': {schema: getModelSchemaRef(Panier)}},
-  })
-  async create(
-    @requestBody({
-      content: {
-        'application/json': {
-          schema: getModelSchemaRef(Panier, {
-            title: 'NewPanier',
-            exclude: ['id'],
-          }),
-        },
+@post('/paniers')
+@response(200, {
+  description: 'Panier model instance',
+  content: {'application/json': {schema: getModelSchemaRef(Panier)}},
+})
+async create(
+  @requestBody({
+    content: {
+      'application/json': {
+        schema: getModelSchemaRef(Panier, {
+          title: 'NewPanier',
+          exclude: ['id'],
+        }),
       },
-    })
-    panier: Omit<Panier, 'id'>,
-  ): Promise<Panier> {
-    return this.panierRepository.create(panier);
+    },
+  })
+  panier: Omit<Panier, 'id'>,
+): Promise<Panier> {
+  // Vérifier si un panier existe déjà pour cet utilisateur
+  const existing = await this.panierRepository.findOne({
+    where: {utilisateurId: panier.utilisateurId},
+  });
+
+  if (existing) {
+    throw new Error(`❌ L'utilisateur ${panier.utilisateurId} a déjà un panier.`);
   }
+
+  return this.panierRepository.create(panier);
+}
 
   @get('/paniers/count')
   @response(200, {

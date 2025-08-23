@@ -1,5 +1,6 @@
-import {Entity, model, property, belongsTo} from '@loopback/repository';
+import {Entity, model, property, belongsTo, hasMany} from '@loopback/repository';
 import {Utilisateur} from './utilisateur.model';
+import {Media} from './media.model';
 
 @model({settings: {strict: false}})
 export class BienImmo extends Entity {
@@ -61,6 +62,9 @@ export class BienImmo extends Entity {
 
   @belongsTo(() => Utilisateur)
   utilisateurId: string;
+
+  @hasMany(() => Media)
+  media: Media[];
   // Define well-known properties here
 
   // Indexer property to allow additional data
