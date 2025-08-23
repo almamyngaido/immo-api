@@ -13,7 +13,7 @@ export class MediaRepository extends DefaultCrudRepository<
   public readonly bienImmo: BelongsToAccessor<BienImmo, typeof Media.prototype.id>;
 
   constructor(
-    @inject('datasources.cartoDataSource') dataSource: ImmoApiDataSource, @repository.getter('BienImmoRepository') protected bienImmoRepositoryGetter: Getter<BienImmoRepository>,
+    @inject('datasources.immoApi') dataSource: ImmoApiDataSource, @repository.getter('BienImmoRepository') protected bienImmoRepositoryGetter: Getter<BienImmoRepository>,
   ) {
     super(Media, dataSource);
     this.bienImmo = this.createBelongsToAccessorFor('bienImmo', bienImmoRepositoryGetter,);
