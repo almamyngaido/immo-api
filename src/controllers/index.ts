@@ -13,3 +13,4 @@ export * from './bien-immo-utilisateur.controller';
 export * from './bien-immo-media.controller';
 export * from './media-bien-immo.controller';
 export * from './media.controller';
+export * from './auth.controller';
