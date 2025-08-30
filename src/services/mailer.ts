@@ -161,13 +161,13 @@ export class EmailService {
       Si vous n'avez pas créé ce compte, ignorez cet email.
 
       Cordialement,
-      L'équipe Immo
+      L'équipe Maxiim
     `;
 
     try {
       console.log('📤 Sending verification email to:', email);
       const info = await this.transporter.sendMail({
-        from: `"Immo API" <${process.env.GMAIL_USER}>`,
+        from: `"MAxiim" <${process.env.GMAIL_USER}>`,
         to: email,
         subject: 'Confirmez votre email 📧',
         text: textContent,
@@ -191,7 +191,7 @@ export class EmailService {
 
     try {
       const info = await this.transporter.sendMail({
-        from: `"Immo API" <${process.env.GMAIL_USER}>`,
+        from: `"Maxiim" <${process.env.GMAIL_USER}>`,
         to: email,
         subject: `Bienvenue ${firstName} ! 🎉`,
         html: `
@@ -294,13 +294,13 @@ export class EmailService {
       Pour votre sécurité, ce lien ne peut être utilisé qu'une seule fois.
 
       Cordialement,
-      L'équipe Immo
+      L'équipe Maxiim
     `;
 
     try {
       console.log('📤 Sending password reset email to:', email);
       const info = await this.transporter.sendMail({
-        from: `"Immo API" <${process.env.GMAIL_USER}>`,
+        from: `"" <${process.env.GMAIL_USER}>`,
         to: email,
         subject: '🔒 Réinitialisation de votre mot de passe',
         text: textContent,
@@ -372,7 +372,7 @@ export class EmailService {
 
     try {
       const info = await this.transporter.sendMail({
-        from: `"Immo API" <${process.env.GMAIL_USER}>`,
+        from: `"Maxiim" <${process.env.GMAIL_USER}>`,
         to: email,
         subject: '✅ Votre mot de passe a été modifié',
         html: htmlContent,
@@ -414,7 +414,7 @@ export class EmailService {
           </div>
           <div class="content">
             <h2>Bonjour ${firstName},</h2>
-            <p>Votre code OTP pour vérifier votre compte Immo API est :</p>
+            <p>Votre code OTP pour vérifier votre compte Maxiim est :</p>
             <p class="otp">${otp}</p>
             <p>Entrez ce code dans l'application pour compléter votre inscription.</p>
             <p><strong>Ce code expirera dans 1 heure.</strong></p>
@@ -432,22 +432,22 @@ export class EmailService {
     const textContent = `
       Bonjour ${firstName},
 
-      Votre code OTP pour vérifier votre compte Immo API est : ${otp}
+      Votre code OTP pour vérifier votre compte Maxiim est : ${otp}
 
       Entrez ce code dans l'application pour compléter votre inscription.
       Ce code expirera dans 1 heure.
       Si vous n'avez pas fait cette demande, ignorez cet email.
 
       Cordialement,
-      L'équipe Immo
+      L'équipe Maxiim
     `;
 
     try {
       console.log('📤 Sending OTP email to:', email);
       const info = await this.transporter.sendMail({
-        from: `"Immo API" <${process.env.GMAIL_USER}>`,
+        from: `"Maxiim" <${process.env.GMAIL_USER}>`,
         to: email,
-        subject: '🔐 Votre code OTP pour Immo API',
+        subject: '🔐 Votre code OTP pour Maxiim',
         text: textContent,
         html: htmlContent,
       });

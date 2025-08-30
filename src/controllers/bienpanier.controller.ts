@@ -7,13 +7,13 @@ import {
   Where,
 } from '@loopback/repository';
 import {
-  post,
-  param,
+  del,
   get,
   getModelSchemaRef,
+  param,
   patch,
+  post,
   put,
-  del,
   requestBody,
   response,
 } from '@loopback/rest';
@@ -23,8 +23,8 @@ import {BienPanierRepository} from '../repositories';
 export class BienpanierController {
   constructor(
     @repository(BienPanierRepository)
-    public bienPanierRepository : BienPanierRepository,
-  ) {}
+    public bienPanierRepository: BienPanierRepository,
+  ) { }
 
   @post('/bien-paniers')
   @response(200, {

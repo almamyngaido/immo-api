@@ -1,3 +1,5 @@
+import {authenticate} from '@loopback/authentication';
+import {inject} from '@loopback/core';
 import {
   Count,
   CountSchema,
@@ -7,24 +9,25 @@ import {
   Where,
 } from '@loopback/repository';
 import {
-  post,
-  param,
+  del,
   get,
   getModelSchemaRef,
+  param,
   patch,
+  post,
   put,
-  del,
   requestBody,
   response,
 } from '@loopback/rest';
+import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
 import {Utilisateur} from '../models';
 import {UtilisateurRepository} from '../repositories';
 
 export class UtilisateurController {
   constructor(
     @repository(UtilisateurRepository)
-    public utilisateurRepository : UtilisateurRepository,
-  ) {}
+    public utilisateurRepository: UtilisateurRepository,
+  ) { }
 
   @post('/utilisateurs')
   @response(200, {
@@ -146,5 +149,24 @@ export class UtilisateurController {
   })
   async deleteById(@param.path.string('id') id: string): Promise<void> {
     await this.utilisateurRepository.deleteById(id);
+  }
+
+  @authenticate('jwt')
+  @get('/me')
+  @response(200, {
+    description: 'Current authenticated user',
+    content: {
+      'application/json': {
+        schema: getModelSchemaRef(Utilisateur, {includeRelations: true}),
+      },
+    },
+  })
+  async me(
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<Partial<Utilisateur>> {
+    const userId = currentUser[securityId];
+    const user = await this.utilisateurRepository.findById(userId);
+    const {motDePasse, otp, otpExpiry, resetPasswordToken, resetPasswordTokenExpiry, verificationToken, ...safeUser} = user;
+    return safeUser;
   }
 }
