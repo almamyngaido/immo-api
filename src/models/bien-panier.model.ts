@@ -1,4 +1,5 @@
-import {Entity, model, property} from '@loopback/repository';
+import {Entity, model, property, belongsTo} from '@loopback/repository';
+import {BienImmo} from './bien-immo.model';
 
 @model({settings: {strict: false}})
 export class BienPanier extends Entity {
@@ -19,10 +20,10 @@ export class BienPanier extends Entity {
   })
   panierId?: string;
 
-  @property({
-    type: 'string',
-  })
+  @belongsTo(() => BienImmo)
   bienImmoId?: string;
+
+  bienImmo?: BienImmo;
   // Define well-known properties here
 
   // Indexer property to allow additional data
@@ -35,7 +36,7 @@ export class BienPanier extends Entity {
 }
 
 export interface BienPanierRelations {
-  // describe navigational properties here
+  bienImmo?: BienImmo;
 }
 
 export type BienPanierWithRelations = BienPanier & BienPanierRelations;

@@ -225,6 +225,7 @@ export class AuthController {
     };
 
     const token = await this.jwtService.generateToken(userProfile);
+    console.log("token",token);
     return {token};
   }
 
