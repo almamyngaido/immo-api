@@ -12,6 +12,7 @@ import {
   del,
   get,
   getModelSchemaRef,
+  HttpErrors,
   param,
   patch,
   post,
@@ -79,6 +80,42 @@ export class UtilisateurController {
     return this.utilisateurRepository.find(filter);
   }
 
+  @get('/utilisateurs/inactif')
+  @response(200, {
+    description: 'Array of Utilisateur model instances',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'array',
+          items: getModelSchemaRef(Utilisateur, {includeRelations: true}),
+        },
+      },
+    },
+  })
+  async findinactif(
+    @param.filter(Utilisateur) filter?: Filter<Utilisateur>,
+  ): Promise<Utilisateur[]> {
+    return this.utilisateurRepository.find({where: {verified: false}, ...filter});
+  }
+
+  @get('utilisateurs/verified')
+  @response(200, {
+    description: 'Array of Utilisateur model instances',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'array',
+          items: getModelSchemaRef(Utilisateur, {includeRelations: true}),
+        },
+      },
+    },
+  })
+  async findactif(
+    @param.filter(Utilisateur) filter?: Filter<Utilisateur>,
+  ): Promise<Utilisateur[]> {
+    return this.utilisateurRepository.find({where: {verified: true}, ...filter});
+  }
+
   @patch('/utilisateurs')
   @response(200, {
     description: 'Utilisateur PATCH success count',
@@ -97,6 +134,9 @@ export class UtilisateurController {
   ): Promise<Count> {
     return this.utilisateurRepository.updateAll(utilisateur, where);
   }
+
+
+
 
   @get('/utilisateurs/{id}')
   @response(200, {
@@ -143,6 +183,8 @@ export class UtilisateurController {
     await this.utilisateurRepository.replaceById(id, utilisateur);
   }
 
+
+
   @del('/utilisateurs/{id}')
   @response(204, {
     description: 'Utilisateur DELETE success',
@@ -169,4 +211,111 @@ export class UtilisateurController {
     const {motDePasse, otp, otpExpiry, resetPasswordToken, resetPasswordTokenExpiry, verificationToken, ...safeUser} = user;
     return safeUser;
   }
+
+
+  @put('/utilisateurs/{id}/verification')
+  @response(200, {
+    description: 'Mise à jour du statut de vérification',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: {
+            message: {type: 'string'},
+            user: {$ref: '#/components/schemas/Utilisateur'},
+          },
+        },
+      },
+    },
+  })
+  async updateVerificationStatus(
+    @param.path.string('id') id: string,
+    @requestBody({
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              verified: {type: 'boolean'},
+            },
+            required: ['verified'],
+          },
+        },
+      },
+    })
+    body: {verified: boolean},
+  ): Promise<object> {
+    // Vérifie que l'utilisateur existe
+    const user = await this.utilisateurRepository.findById(id);
+    if (!user) {
+      throw new Error('Utilisateur non trouvé');
+    }
+
+    // Met à jour la propriété verified
+    await this.utilisateurRepository.updateById(id, {verified: body.verified});
+
+    // Récupère l'utilisateur mis à jour
+    const updatedUser = await this.utilisateurRepository.findById(id);
+
+    return {
+      message: `Statut de vérification mis à jour à ${body.verified}`,
+      user: updatedUser,
+    };
+  }
+
+  @put('/users/{id}/role')
+  @response(200, {
+    description: 'Mise à jour du rôle de l’utilisateur',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: {
+            message: {type: 'string'},
+            user: {$ref: '#/components/schemas/Utilisateur'},
+          },
+        },
+      },
+    },
+  })
+  async updateUserRole(
+    @param.path.string('id') id: string,
+    @requestBody({
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['role'],
+            properties: {
+              role: {
+                type: 'string',
+                description: 'Nouveau rôle de l’utilisateur (ex: admin, user, etc.)',
+              },
+            },
+          },
+        },
+      },
+    })
+    body: {role: string},
+  ): Promise<object> {
+    // Vérifier que l'utilisateur existe
+    const user = await this.utilisateurRepository.findById(id);
+    if (!user) {
+      throw new HttpErrors.NotFound('Utilisateur non trouvé');
+    }
+
+    // Mettre à jour le rôle
+    await this.utilisateurRepository.updateById(id, {role: body.role});
+
+    // Récupérer l'utilisateur mis à jour
+    const updatedUser = await this.utilisateurRepository.findById(id);
+
+    return {
+      message: `Rôle de l’utilisateur mis à jour en "${body.role}"`,
+      user: updatedUser,
+    };
+  }
+
 }
