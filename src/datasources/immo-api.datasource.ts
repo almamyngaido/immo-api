@@ -1,14 +1,41 @@
 import {inject, lifeCycleObserver, LifeCycleObserver} from '@loopback/core';
 import {juggler} from '@loopback/repository';
 
+// Build config based on environment
+const buildConfig = () => {
+  const mongoUrl = process.env.MONGODB_URL;
+  const dbName = process.env.MONGODB_DATABASE || 'immo-db';
 
-const config = {
-  name: 'immo-dataSource',
-  connector: 'mongodb',
-  url: process.env.MONGODB_URL || 'mongodb://127.0.0.1:27017',
-  database: process.env.MONGODB_DATABASE || 'immo-db',
-  useNewUrlParser: true
+  // Production/Railway: append database name to URL if not present
+  if (mongoUrl && process.env.NODE_ENV === 'production') {
+    // Check if URL already has a database path
+    const url = new URL(mongoUrl);
+    if (!url.pathname || url.pathname === '/') {
+      // Append database name to the connection string
+      url.pathname = `/${dbName}`;
+    }
+
+    return {
+      name: 'immo-dataSource',
+      connector: 'mongodb',
+      url: url.toString(),
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    };
+  }
+
+  // Local development: use simple connection
+  return {
+    name: 'immo-dataSource',
+    connector: 'mongodb',
+    url: mongoUrl || 'mongodb://127.0.0.1:27017',
+    database: dbName,
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+  };
 };
+
+const config = buildConfig();
 
 // Observe application's life cycle to disconnect the datasource when
 // application is stopped. This allows the application to be shut down
