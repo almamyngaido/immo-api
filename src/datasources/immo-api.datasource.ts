@@ -6,8 +6,12 @@ const buildConfig = () => {
   const mongoUrl = process.env.MONGODB_URL;
   const dbName = process.env.MONGODB_DATABASE || 'immo-db';
 
-  // Production/Railway: append database name to URL if not present
-  if (mongoUrl && process.env.NODE_ENV === 'production') {
+  console.log('[MongoDB Config] MONGODB_URL exists:', !!mongoUrl);
+  console.log('[MongoDB Config] NODE_ENV:', process.env.NODE_ENV);
+  console.log('[MongoDB Config] Database name:', dbName);
+
+  // If MONGODB_URL is provided (Railway/production), use production config
+  if (mongoUrl && !mongoUrl.includes('127.0.0.1') && !mongoUrl.includes('localhost')) {
     // Check if URL already has a database path
     const url = new URL(mongoUrl);
     if (!url.pathname || url.pathname === '/') {
@@ -16,7 +20,7 @@ const buildConfig = () => {
     }
 
     const finalUrl = url.toString();
-    console.log('[MongoDB Config] Connecting to database:', dbName);
+    console.log('[MongoDB Config] Using PRODUCTION config');
     console.log('[MongoDB Config] URL host:', url.hostname);
     console.log('[MongoDB Config] URL port:', url.port);
     console.log('[MongoDB Config] URL pathname:', url.pathname);
@@ -41,6 +45,7 @@ const buildConfig = () => {
   }
 
   // Local development: use simple connection
+  console.log('[MongoDB Config] Using LOCAL config');
   return {
     name: 'immo-dataSource',
     connector: 'mongodb',
