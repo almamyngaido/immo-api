@@ -2,8 +2,8 @@ import {HttpErrors} from '@loopback/rest';
 import {securityId, UserProfile} from '@loopback/security';
 import * as jwt from 'jsonwebtoken';
 
-const jwtSecret = 'your-secret-key-here'; // Change this to a secure secret (use env vars in production)
-const jwtExpiry = '1h'; // Token expiry time
+const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-here-change-in-production';
+const jwtExpiry = process.env.JWT_EXPIRY || '24h'; // Token expiry time
 
 export interface TokenService {
   generateToken(userProfile: UserProfile): Promise<string>;

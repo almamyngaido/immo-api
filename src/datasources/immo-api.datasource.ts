@@ -5,9 +5,8 @@ import {juggler} from '@loopback/repository';
 const config = {
   name: 'immo-dataSource',
   connector: 'mongodb',
-  url: 'mongodb://127.0.0.1:27017',
-  // url: 'mongodb://10.20.1.68:30017', // Your MongoDB connection string
-  database: 'immo-db',
+  url: process.env.MONGODB_URL || 'mongodb://127.0.0.1:27017',
+  database: process.env.MONGODB_DATABASE || 'immo-db',
   useNewUrlParser: true
 };
 
