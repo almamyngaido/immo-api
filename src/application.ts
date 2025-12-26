@@ -14,21 +14,40 @@ import {MySequence} from './sequence';
 import {JwtService} from './services/jwt.service';
 export {ApplicationConfig};
 
-
-
 import {AuthenticationComponent} from '@loopback/authentication';
 import {JWTAuthenticationComponent} from '@loopback/authentication-jwt';
 import {EmailService} from './services/mailer';
+
 export class ImmoApiApplication extends BootMixin(
   ServiceMixin(RepositoryMixin(RestApplication)),
 ) {
   constructor(options: ApplicationConfig = {}) {
-    super(options);
+    super({
+      ...options,
+      rest: {
+        ...options.rest,
+        // 🔹 Activation CORS
+        cors: {
+          origin: [
+            'http://localhost:56111',         // Frontend local
+            'https://ton-projet.netlify.app', // Frontend Netlify
+          ],
+          methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+          allowedHeaders: 'Content-Type, Authorization',
+          credentials: true,
+        },
+      },
+    });
+
     dotenv.config(); // Load .env variables
 
     // Set up the custom sequence
     this.sequence(MySequence);
+
+    // Bind services
     this.bind('services.EmailService').toClass(EmailService);
+    this.bind(TokenServiceBindings.TOKEN_SERVICE).toClass(JwtService);
+
     // Set up default home page
     this.static('/', path.join(__dirname, '../public'));
 
@@ -45,10 +64,10 @@ export class ImmoApiApplication extends BootMixin(
     this.component(RestExplorerComponent);
 
     this.projectRoot = __dirname;
-    // Customize @loopback/boot Booter Conventions here
+
+    // Boot options
     this.bootOptions = {
       controllers: {
-        // Customize ControllerBooter Conventions here
         dirs: ['controllers'],
         extensions: ['.controller.js'],
         nested: true,
