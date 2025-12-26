@@ -15,16 +15,23 @@ const buildConfig = () => {
       url.pathname = `/${dbName}`;
     }
 
+    const finalUrl = url.toString();
+    console.log('[MongoDB Config] Connecting to database:', dbName);
+    console.log('[MongoDB Config] URL host:', url.hostname);
+    console.log('[MongoDB Config] URL port:', url.port);
+    console.log('[MongoDB Config] URL pathname:', url.pathname);
+
     return {
       name: 'immo-dataSource',
       connector: 'mongodb',
-      url: url.toString(),
+      url: finalUrl,
       useNewUrlParser: true,
       useUnifiedTopology: true,
       // Connection pooling for better performance
       poolSize: 10,
-      socketTimeoutMS: 45000,
-      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 60000,
+      serverSelectionTimeoutMS: 30000,
+      connectTimeoutMS: 30000,
       heartbeatFrequencyMS: 10000,
       // Auto-reconnect settings
       maxPoolSize: 10,
