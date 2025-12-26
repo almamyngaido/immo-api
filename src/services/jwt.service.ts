@@ -1,9 +1,9 @@
 import {HttpErrors} from '@loopback/rest';
 import {securityId, UserProfile} from '@loopback/security';
-import * as jwt from 'jsonwebtoken';
+import {sign, verify, SignOptions} from 'jsonwebtoken';
 
-const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-here-change-in-production';
-const jwtExpiry = process.env.JWT_EXPIRY || '24h'; // Token expiry time
+const jwtSecret: string = process.env.JWT_SECRET || 'your-secret-key-here-change-in-production';
+const jwtExpiry: string = process.env.JWT_EXPIRY || '24h'; // Token expiry time
 
 export interface TokenService {
   generateToken(userProfile: UserProfile): Promise<string>;
@@ -15,12 +15,13 @@ export class JwtService implements TokenService {
     if (!userProfile) {
       throw new HttpErrors.Unauthorized('Error generating token: userProfile is null');
     }
-    return jwt.sign(userProfile, jwtSecret, {expiresIn: jwtExpiry});
+    const options: SignOptions = {expiresIn: jwtExpiry as any};
+    return sign(userProfile, jwtSecret, options);
   }
 
   async verifyToken(token: string): Promise<UserProfile> {
     try {
-      const decoded = jwt.verify(token, jwtSecret) as any;
+      const decoded = verify(token, jwtSecret) as any;
       return {
         [securityId]: decoded.id,
         name: decoded.name,
