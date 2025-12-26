@@ -20,7 +20,16 @@ const buildConfig = () => {
       connector: 'mongodb',
       url: url.toString(),
       useNewUrlParser: true,
-      useUnifiedTopology: true
+      useUnifiedTopology: true,
+      // Connection pooling for better performance
+      poolSize: 10,
+      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 5000,
+      heartbeatFrequencyMS: 10000,
+      // Auto-reconnect settings
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000
     };
   }
 

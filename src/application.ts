@@ -60,6 +60,7 @@ export class ImmoApiApplication extends BootMixin(
     this.component(JWTAuthenticationComponent);
     this.configure(RestExplorerBindings.COMPONENT).to({
       path: '/explorer',
+      useSelfHostedSpec: true,
     });
     this.component(RestExplorerComponent);
 
