@@ -31,6 +31,10 @@ export class ImmoApiApplication extends BootMixin(
     this.bind('services.EmailService').toClass(EmailService);
     // Set up default home page
     this.static('/', path.join(__dirname, '../public'));
+
+    // Serve uploaded files
+    this.static('/uploads', path.join(__dirname, '../uploads'));
+
     this.bind(TokenServiceBindings.TOKEN_SERVICE).toClass(JwtService);
     // Customize @loopback/rest-explorer configuration here
     this.component(AuthenticationComponent);

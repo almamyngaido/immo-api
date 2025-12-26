@@ -87,7 +87,20 @@ export class BienImmoController {
   async find(
     @param.filter(BienImmo) filter?: Filter<BienImmo>,
   ): Promise<BienImmo[]> {
-    return this.bienImmoRepository.find(filter);
+    // Ensure utilisateur is included in the response
+    const includeFilter = {
+      ...filter,
+      include: [
+        ...(filter?.include || []),
+        {
+          relation: 'utilisateur',
+          scope: {
+            fields: ['id', 'nom', 'prenom', 'email', 'phoneNumber'],
+          },
+        },
+      ],
+    };
+    return this.bienImmoRepository.find(includeFilter);
   }
 
   @patch('/bien-immos')
@@ -122,7 +135,20 @@ export class BienImmoController {
     @param.path.string('id') id: string,
     @param.filter(BienImmo, {exclude: 'where'}) filter?: FilterExcludingWhere<BienImmo>
   ): Promise<BienImmo> {
-    return this.bienImmoRepository.findById(id, filter);
+    // Ensure utilisateur is included in the response
+    const includeFilter = {
+      ...filter,
+      include: [
+        ...(filter?.include || []),
+        {
+          relation: 'utilisateur',
+          scope: {
+            fields: ['id', 'nom', 'prenom', 'email', 'phoneNumber'],
+          },
+        },
+      ],
+    };
+    return this.bienImmoRepository.findById(id, includeFilter);
   }
 
   @patch('/bien-immos/{id}')

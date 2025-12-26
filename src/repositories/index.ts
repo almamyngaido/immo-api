@@ -5,3 +5,5 @@ export * from './role.repository';
 export * from './utilisateur-role.repository';
 export * from './utilisateur.repository';
 export * from './media.repository';
+export * from './conversation.repository';
+export * from './message.repository';

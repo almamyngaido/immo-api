@@ -45,30 +45,32 @@ export class BienImmoMediaController {
     return this.bienImmoRepository.media(id).find(filter);
   }
 
-  @post('/bien-immos/{id}/media', {
-    responses: {
-      '200': {
-        description: 'BienImmo model instance',
-        content: {'application/json': {schema: getModelSchemaRef(Media)}},
-      },
-    },
-  })
-  async create(
-    @param.path.string('id') id: typeof BienImmo.prototype.id,
-    @requestBody({
-      content: {
-        'application/json': {
-          schema: getModelSchemaRef(Media, {
-            title: 'NewMediaInBienImmo',
-            exclude: ['id'],
-            optional: ['bienImmoId']
-          }),
-        },
-      },
-    }) media: Omit<Media, 'id'>,
-  ): Promise<Media> {
-    return this.bienImmoRepository.media(id).create(media);
-  }
+  // COMMENTED OUT: Conflicts with file upload endpoint in file-upload.controller.ts
+  // Use POST /bien-immos/{id}/media with multipart/form-data for file uploads instead
+  // @post('/bien-immos/{id}/media', {
+  //   responses: {
+  //     '200': {
+  //       description: 'BienImmo model instance',
+  //       content: {'application/json': {schema: getModelSchemaRef(Media)}},
+  //     },
+  //   },
+  // })
+  // async create(
+  //   @param.path.string('id') id: typeof BienImmo.prototype.id,
+  //   @requestBody({
+  //     content: {
+  //       'application/json': {
+  //         schema: getModelSchemaRef(Media, {
+  //           title: 'NewMediaInBienImmo',
+  //           exclude: ['id'],
+  //           optional: ['bienImmoId']
+  //         }),
+  //       },
+  //     },
+  //   }) media: Omit<Media, 'id'>,
+  // ): Promise<Media> {
+  //   return this.bienImmoRepository.media(id).create(media);
+  // }
 
   @patch('/bien-immos/{id}/media', {
     responses: {
