@@ -20,12 +20,27 @@ const buildConfig = () => {
   if (mongoUrl) {
     console.log('[MongoDB Config] Using PRODUCTION config with MONGO_URL');
 
+    // Ensure database name is appended to URL
+    const dbName = process.env.MONGODB_DATABASE || 'immo-db';
+    let finalUrl = mongoUrl;
+
     try {
       const url = new URL(mongoUrl);
-      console.log('[MongoDB Config] URL host:', url.hostname);
-      console.log('[MongoDB Config] URL port:', url.port);
-      console.log('[MongoDB Config] URL pathname:', url.pathname);
-      console.log('[MongoDB Config] URL has auth:', url.username ? 'Yes' : 'No');
+      console.log('[MongoDB Config] Original URL host:', url.hostname);
+      console.log('[MongoDB Config] Original URL port:', url.port);
+      console.log('[MongoDB Config] Original URL pathname:', url.pathname);
+      console.log('[MongoDB Config] Original URL has auth:', url.username ? 'Yes' : 'No');
+
+      // Force the database name in the URL path
+      if (!url.pathname || url.pathname === '/' || url.pathname === '') {
+        url.pathname = `/${dbName}`;
+        finalUrl = url.toString();
+        console.log('[MongoDB Config] Database name added to URL:', dbName);
+      } else {
+        console.log('[MongoDB Config] URL already has database:', url.pathname);
+      }
+
+      console.log('[MongoDB Config] Final URL pathname:', new URL(finalUrl).pathname);
     } catch (e) {
       console.error('[MongoDB Config] Error parsing URL:', e);
     }
@@ -33,7 +48,7 @@ const buildConfig = () => {
     return {
       name: 'immo-dataSource',
       connector: 'mongodb',
-      url: mongoUrl,
+      url: finalUrl,
       useNewUrlParser: true,
       useUnifiedTopology: true,
       // Connection pooling for better performance
