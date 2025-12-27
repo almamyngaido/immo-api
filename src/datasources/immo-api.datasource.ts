@@ -3,11 +3,19 @@ import {juggler} from '@loopback/repository';
 
 // Build config based on environment
 const buildConfig = () => {
-  const mongoUrl = process.env.MONGODB_URL;
+  // Debug: print all MongoDB-related env vars
+  console.log('[MongoDB Config] === Environment Variables Debug ===');
+  console.log('[MongoDB Config] MONGODB_URL:', process.env.MONGODB_URL);
+  console.log('[MongoDB Config] MONGO_URL:', process.env.MONGO_URL);
+  console.log('[MongoDB Config] DATABASE_URL:', process.env.DATABASE_URL);
+  console.log('[MongoDB Config] MONGODB_DATABASE:', process.env.MONGODB_DATABASE);
+  console.log('[MongoDB Config] NODE_ENV:', process.env.NODE_ENV);
+  console.log('[MongoDB Config] ===================================');
+
+  const mongoUrl = process.env.MONGODB_URL || process.env.MONGO_URL || process.env.DATABASE_URL;
   const dbName = process.env.MONGODB_DATABASE || 'immo-db';
 
-  console.log('[MongoDB Config] MONGODB_URL exists:', !!mongoUrl);
-  console.log('[MongoDB Config] NODE_ENV:', process.env.NODE_ENV);
+  console.log('[MongoDB Config] Selected URL exists:', !!mongoUrl);
   console.log('[MongoDB Config] Database name:', dbName);
 
   // If MONGODB_URL is provided (Railway/production), use production config
