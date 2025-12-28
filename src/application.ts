@@ -1,6 +1,6 @@
 import {TokenServiceBindings} from '@loopback/authentication-jwt';
 import {BootMixin} from '@loopback/boot';
-import {ApplicationConfig} from '@loopback/core';
+import {ApplicationConfig, BindingScope} from '@loopback/core';
 import {RepositoryMixin} from '@loopback/repository';
 import {RestApplication} from '@loopback/rest';
 import {
@@ -28,10 +28,7 @@ export class ImmoApiApplication extends BootMixin(
         ...options.rest,
         // 🔹 Activation CORS
         cors: {
-          origin: [
-            'http://localhost:56111',         // Frontend local
-            'https://ton-projet.netlify.app', // Frontend Netlify
-          ],
+          origin: true,  // Allow any origin in development (reflects request origin)
           methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
           allowedHeaders: 'Content-Type, Authorization',
           credentials: true,
@@ -44,9 +41,15 @@ export class ImmoApiApplication extends BootMixin(
     // Set up the custom sequence
     this.sequence(MySequence);
 
-    // Bind services
-    this.bind('services.EmailService').toClass(EmailService);
-    this.bind(TokenServiceBindings.TOKEN_SERVICE).toClass(JwtService);
+    // Bind services with singleton scope to prevent multiple instances
+    this.bind('services.EmailService').toClass(EmailService).inScope(BindingScope.SINGLETON);
+
+    // Mount authentication component first
+    this.component(AuthenticationComponent);
+    this.component(JWTAuthenticationComponent);
+
+    // Then override the default token service with our custom one
+    this.bind(TokenServiceBindings.TOKEN_SERVICE).toClass(JwtService).inScope(BindingScope.SINGLETON);
 
     // Set up default home page
     this.static('/', path.join(__dirname, '../public'));
@@ -54,10 +57,7 @@ export class ImmoApiApplication extends BootMixin(
     // Serve uploaded files
     this.static('/uploads', path.join(__dirname, '../uploads'));
 
-    this.bind(TokenServiceBindings.TOKEN_SERVICE).toClass(JwtService);
-    // Customize @loopback/rest-explorer configuration here
-    this.component(AuthenticationComponent);
-    this.component(JWTAuthenticationComponent);
+    // Configure REST explorer
     this.configure(RestExplorerBindings.COMPONENT).to({
       path: '/explorer',
       useSelfHostedSpec: true,

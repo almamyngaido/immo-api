@@ -213,19 +213,35 @@ export class AuthController {
       });
     }
 
-    const roles = await this.utilisateurRepository.roles(user.id!).find();
-    const roleIds = roles.map(role => role.id!);
+    // Get roles from relationship (if exists)
+    let rolesList: any[] = [];
+    try {
+      rolesList = await this.utilisateurRepository.roles(user.id!).find();
+    } catch (error) {
+      console.log('⚠️ No roles relationship found, using direct role field');
+    }
+
+    const roleIds = rolesList.map(role => role.id!);
+    const finalRoles = roleIds.length > 0 ? roleIds : [user.role];
+
+    console.log('🔐 Creating user profile for token...');
+    console.log('  → User ID:', user.id);
+    console.log('  → User Role Field:', user.role);
+    console.log('  → Roles from relationship:', roleIds);
+    console.log('  → Final roles for token:', finalRoles);
 
     const userProfile: UserProfile = {
       [securityId]: user.id!,
       name: `${user.prenom || ''} ${user.nom}`.trim(),
       email: user.email,
       phoneNumber: user.phoneNumber,
-      roles: roleIds.length > 0 ? roleIds : [user.role],
+      roles: finalRoles,
     };
 
+    console.log('  → User Profile Object:', JSON.stringify(userProfile, null, 2));
+
     const token = await this.jwtService.generateToken(userProfile);
-    console.log("token",token);
+    console.log("✅ Token generated:", token);
     return {token};
   }
 
@@ -271,19 +287,51 @@ export class AuthController {
       throw new HttpErrors.Conflict('Email or phone number already exists.');
     }
 
-    // Generate OTP
-    const otp = this.emailService.generateOtp();
-
-    // Create user
+    // Create user (OTP will be generated when admin approves)
     const newUser = await this.utilisateurRepository.create({
       ...signupData,
       verified: false,
-      otp,
-      otpExpiry: this.emailService.getTokenExpiration(),
+      otp: undefined,
+      otpExpiry: undefined,
     });
 
-    // Send OTP email
-    await this.emailService.sendOtpEmail(newUser.email, newUser.prenom || newUser.nom, otp);
+    // Find all admins
+    const admins = await this.utilisateurRepository.find({
+      where: {role: 'admin'},
+    });
+
+    // Send notification to each admin (without OTP)
+    if (admins.length > 0) {
+      const registrationDateTime = new Date(newUser.dateInscription).toLocaleString('fr-FR');
+      for (const admin of admins) {
+        try {
+          await this.emailService.sendAdminRegistrationNotification(
+            admin.email,
+            admin.prenom || admin.nom,
+            `${newUser.prenom || ''} ${newUser.nom}`.trim(),
+            newUser.email,
+            newUser.phoneNumber,
+            newUser.role,
+            registrationDateTime,
+          );
+        } catch (error) {
+          console.error(`Failed to send notification to admin ${admin.email}:`, error);
+        }
+      }
+    } else {
+      console.warn('No admins found to notify of new registration');
+    }
+
+    // Send pending approval email to registering user
+    try {
+      await this.emailService.sendRegistrationPendingEmail(
+        newUser.email,
+        newUser.prenom || newUser.nom,
+        newUser.role,
+      );
+    } catch (error) {
+      console.error('Failed to send registration pending email:', error);
+    }
 
     // Return user without sensitive data
     const {motDePasse, otp: _, otpExpiry: __, ...userWithoutSensitive} = newUser;
@@ -436,5 +484,122 @@ export class AuthController {
   })
   async logout(): Promise<void> {
     console.log('📴 User logged out');
+  }
+
+  @authenticate('jwt')
+  @post('/send-user-otp', {
+    responses: {
+      '200': {
+        description: 'OTP sent to user successfully',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {type: 'string'},
+                userId: {type: 'string'},
+                email: {type: 'string'},
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  async sendUserOtp(
+    @inject(SecurityBindings.USER)
+    currentUserProfile: UserProfile,
+    @requestBody({
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              userId: {type: 'string'},
+              email: {type: 'string'},
+            },
+          },
+        },
+      },
+    })
+    data: {userId?: string; email?: string},
+  ): Promise<{message: string; userId: string; email: string}> {
+    // Validate admin role
+    console.log('🔐 Checking admin permissions...');
+    console.log('  → User Profile (full):', currentUserProfile);
+    console.log('  → User Profile (JSON):', JSON.stringify(currentUserProfile, null, 2));
+    console.log('  → User Profile keys:', Object.keys(currentUserProfile));
+
+    const userRoles = currentUserProfile.roles || [];
+    console.log('  → Roles array:', userRoles);
+    console.log('  → Roles type:', typeof userRoles);
+    console.log('  → Roles is Array:', Array.isArray(userRoles));
+    console.log('  → Roles length:', userRoles.length);
+
+    // Check if user has admin role (case-insensitive)
+    const isAdmin = userRoles.some((role: any) => {
+      const roleStr = typeof role === 'string' ? role : String(role);
+      console.log('    → Checking role:', role, 'as string:', roleStr, 'lowercase:', roleStr.toLowerCase());
+      return roleStr.toLowerCase() === 'admin';
+    });
+
+    console.log('  → Is Admin:', isAdmin);
+
+    if (!isAdmin) {
+      console.error('❌ User is not admin, rejecting request');
+      console.error('❌ Current user email:', currentUserProfile.email);
+      console.error('❌ Expected roles to contain "admin", but got:', userRoles);
+      throw new HttpErrors.Forbidden('Only admins can send OTP to users');
+    }
+
+    console.log('✅ Admin validation passed');
+
+    // Validate input
+    if (!data.userId && !data.email) {
+      throw new HttpErrors.BadRequest('Either userId or email is required');
+    }
+
+    // Find user
+    let user;
+    if (data.userId) {
+      user = await this.utilisateurRepository.findById(data.userId);
+    } else {
+      user = await this.utilisateurRepository.findOne({
+        where: {email: data.email},
+      });
+    }
+
+    if (!user) {
+      throw new HttpErrors.NotFound('User not found');
+    }
+
+    if (user.verified) {
+      throw new HttpErrors.BadRequest('User is already verified');
+    }
+
+    // Regenerate OTP with fresh expiry
+    const newOtp = this.emailService.generateOtp();
+    await this.utilisateurRepository.updateById(user.id!, {
+      otp: newOtp,
+      otpExpiry: this.emailService.getTokenExpiration(),
+    });
+
+    // Send OTP email to user
+    await this.emailService.sendOtpEmail(
+      user.email,
+      user.prenom || user.nom,
+      newOtp,
+      true, // isApprovalEmail flag
+    );
+
+    // Log action
+    console.log(`Admin ${currentUserProfile.email} sent OTP to user ${user.email}`);
+
+    return {
+      message: 'OTP sent to user successfully',
+      userId: user.id!,
+      email: user.email,
+    };
   }
 }

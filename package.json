@@ -49,6 +49,7 @@
     "!*/__tests__"
   ],
   "dependencies": {
+    "@getbrevo/brevo": "^3.0.1",
     "@loopback/authentication": "^11.0.14",
     "@loopback/authentication-jwt": "^0.15.14",
     "@loopback/boot": "^7.0.14",

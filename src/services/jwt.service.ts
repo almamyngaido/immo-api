@@ -1,6 +1,7 @@
 import {HttpErrors} from '@loopback/rest';
 import {securityId, UserProfile} from '@loopback/security';
-import {sign, verify, SignOptions} from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
+import {SignOptions} from 'jsonwebtoken';
 
 const jwtSecret: string = process.env.JWT_SECRET || 'your-secret-key-here-change-in-production';
 const jwtExpiry: string = process.env.JWT_EXPIRY || '24h'; // Token expiry time
@@ -15,19 +16,44 @@ export class JwtService implements TokenService {
     if (!userProfile) {
       throw new HttpErrors.Unauthorized('Error generating token: userProfile is null');
     }
+
+    // Create a plain object for JWT (Symbol properties don't serialize well)
+    const payload = {
+      id: userProfile[securityId],
+      name: userProfile.name,
+      email: userProfile.email,
+      phoneNumber: userProfile.phoneNumber,
+      roles: userProfile.roles || [],
+    };
+
+    console.log('📝 JWT Payload to sign:', JSON.stringify(payload, null, 2));
+
     const options: SignOptions = {expiresIn: jwtExpiry as any};
-    return sign(userProfile, jwtSecret, options);
+    const token = jwt.sign(payload, jwtSecret, options);
+
+    // Verify what we just created
+    const decoded = jwt.decode(token);
+    console.log('✅ Decoded token after signing:', JSON.stringify(decoded, null, 2));
+
+    return token;
   }
 
   async verifyToken(token: string): Promise<UserProfile> {
     try {
-      const decoded = verify(token, jwtSecret) as any;
-      return {
+      const decoded = jwt.verify(token, jwtSecret) as any;
+      console.log('🔍 JWT Decoded Payload:', JSON.stringify(decoded, null, 2));
+
+      const userProfile = {
         [securityId]: decoded.id,
         name: decoded.name,
         email: decoded.email,
-        roles: decoded.roles,
+        phoneNumber: decoded.phoneNumber,
+        roles: decoded.roles || [],
       };
+
+      console.log('🔍 Constructed UserProfile from JWT:', JSON.stringify(userProfile, null, 2));
+
+      return userProfile;
     } catch (err) {
       throw new HttpErrors.Unauthorized('Invalid token');
     }

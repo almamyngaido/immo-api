@@ -1,5 +1,5 @@
 import {injectable} from '@loopback/core';
-import * as nodemailer from 'nodemailer';
+import * as brevo from '@getbrevo/brevo';
 import {v4 as uuidv4} from 'uuid';
 
 // Load environment variables
@@ -7,74 +7,91 @@ require('dotenv').config();
 
 @injectable()
 export class EmailService {
-  private transporter?: nodemailer.Transporter;
+  private apiInstance: brevo.TransactionalEmailsApi;
+  private senderEmail: string;
+  private senderName: string;
+  private isConfigured: boolean = false;
 
   constructor() {
-    // Debug environment variables
-    console.log('🔍 Debug environment variables:');
-    console.log('GMAIL_USER:', process.env.GMAIL_USER);
-    console.log('GMAIL_APP_PASSWORD defined:', !!process.env.GMAIL_APP_PASSWORD);
-    console.log('GMAIL_APP_PASSWORD length:', process.env.GMAIL_APP_PASSWORD?.length);
-    console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
+    console.log('🔍 Initializing Brevo Email Service...');
 
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailPassword = process.env.GMAIL_APP_PASSWORD;
+    const apiKey = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.BREVO_SENDER_EMAIL;
+    const senderName = process.env.BREVO_SENDER_NAME || 'Maxiim';
 
-    if (!gmailUser || !gmailPassword) {
-      console.error('❌ Missing environment variables:');
-      console.error('GMAIL_USER:', gmailUser ? '✅ Defined' : '❌ Missing');
-      console.error('GMAIL_APP_PASSWORD:', gmailPassword ? '✅ Defined' : '❌ Missing');
+    if (!apiKey || !senderEmail) {
+      console.error('❌ Missing Brevo configuration:');
+      console.error('BREVO_API_KEY:', apiKey ? '✅ Defined' : '❌ Missing');
+      console.error('BREVO_SENDER_EMAIL:', senderEmail ? '✅ Defined' : '❌ Missing');
       console.log('⚠️ Development mode: EmailService disabled');
+      this.apiInstance = new brevo.TransactionalEmailsApi();
+      this.senderEmail = '';
+      this.senderName = '';
       return;
     }
 
-    // Configure Gmail transporter
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: gmailUser.trim(),
-        pass: gmailPassword.trim(),
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-      debug: true,
-      logger: true,
-    });
+    this.senderEmail = senderEmail;
+    this.senderName = senderName;
 
-    console.log('📧 Attempting Gmail connection...');
-    this.verifyConnection();
+    // Configure Brevo API
+    this.apiInstance = new brevo.TransactionalEmailsApi();
+    this.apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, apiKey);
+
+    this.isConfigured = true;
+    console.log('✅ Brevo Email Service configured successfully');
+    console.log('📧 Sender:', `${senderName} <${senderEmail}>`);
   }
 
-  private async verifyConnection(): Promise<void> {
-    if (!this.transporter) {
-      console.log('⚠️ Transporter not initialized (development mode)');
+  private async sendBrevoEmail(
+    to: string,
+    subject: string,
+    htmlContent: string,
+    textContent?: string
+  ): Promise<void> {
+    if (!this.isConfigured) {
+      console.log('📧 Development mode: Email simulated for', to);
+      console.log('📬 Subject:', subject);
+      console.log('📄 Content preview:', htmlContent.substring(0, 200) + '...');
+      console.log('⚠️ Brevo is NOT configured - emails will NOT be sent!');
+      console.log('⚠️ Set BREVO_API_KEY and BREVO_SENDER_EMAIL in .env to enable emails');
       return;
     }
 
     try {
-      console.log('🔄 Testing Gmail connection...');
-      const result = await this.transporter.verify();
-      console.log('✅ Gmail configured and ready!', result);
-      console.log('📧 Connected user:', process.env.GMAIL_USER);
+      console.log('📧 Preparing to send email via Brevo...');
+      console.log('  → To:', to);
+      console.log('  → From:', `${this.senderName} <${this.senderEmail}>`);
+      console.log('  → Subject:', subject);
+
+      const sendSmtpEmail = new brevo.SendSmtpEmail();
+      sendSmtpEmail.sender = {
+        name: this.senderName,
+        email: this.senderEmail,
+      };
+      sendSmtpEmail.to = [{email: to}];
+      sendSmtpEmail.subject = subject;
+      sendSmtpEmail.htmlContent = htmlContent;
+      if (textContent) {
+        sendSmtpEmail.textContent = textContent;
+      }
+
+      console.log('📤 Calling Brevo API...');
+      console.log('  → Email object ready:', {
+        from: sendSmtpEmail.sender,
+        to: sendSmtpEmail.to,
+        subject: sendSmtpEmail.subject,
+      });
+
+      const result = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
+      console.log('✅ Email sent via Brevo!');
+      console.log('  → Message ID:', result.body.messageId);
     } catch (error: any) {
-      console.error('❌ Gmail connection error:', error.message);
-      console.error('Error code:', error.code);
-      if (error.code === 'EAUTH') {
-        console.log('\n💡 EAUTH error solutions:');
-        console.log('1. Ensure 2FA is ENABLED on your Gmail account');
-        console.log('2. Generate a NEW App Password');
-        console.log('3. Use the App Password (NOT your Gmail password)');
-        console.log('4. Restart the server after updating .env');
-      }
-      if (error.code === 'ECONNECTION') {
-        console.log('\n🌐 Connection issues:');
-        console.log('1. Check your internet connection');
-        console.log('2. Ensure port 587 is not blocked by firewall');
-      }
+      console.error('❌ Brevo email error:', error.message);
+      console.error('❌ Error details:', JSON.stringify(error.response?.body || error, null, 2));
+      console.error('❌ Error status:', error.response?.status);
+      console.error('❌ Error code:', error.code);
+      console.error('❌ Full error stack:', error.stack);
+      throw error;
     }
   }
 
@@ -93,13 +110,6 @@ export class EmailService {
   }
 
   async sendVerificationEmail(email: string, firstName: string, token: string): Promise<void> {
-    if (!this.transporter) {
-      console.log('📧 Development mode: Verification email simulated for', email);
-      console.log('🔗 Token:', token);
-      console.log('👤 For:', firstName);
-      return;
-    }
-
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'
       }/verify-email?token=${token}`;
 
@@ -166,54 +176,31 @@ export class EmailService {
 
     try {
       console.log('📤 Sending verification email to:', email);
-      const info = await this.transporter.sendMail({
-        from: `"MAxiim" <${process.env.GMAIL_USER}>`,
-        to: email,
-        subject: 'Confirmez votre email 📧',
-        text: textContent,
-        html: htmlContent,
-      });
-      console.log('✅ Verification email sent:', info.messageId);
+      await this.sendBrevoEmail(email, 'Confirmez votre email 📧', htmlContent, textContent);
       console.log('🔗 Verification link:', verificationUrl);
     } catch (error: any) {
       console.error('❌ Error sending verification email:', error.message);
-      console.error('Error code:', error.code);
       console.log('⚠️ Development mode: Email not sent but signup continues');
       console.log('🔗 Verification link:', verificationUrl);
     }
   }
 
   async sendWelcomeEmail(email: string, firstName: string): Promise<void> {
-    if (!this.transporter) {
-      console.log('📧 Development mode: Welcome email simulated for', firstName);
-      return;
-    }
+    const htmlContent = `
+      <h1>Bienvenue ${firstName} ! 🎉</h1>
+      <p>Votre compte a été activé avec succès.</p>
+      <p>Vous pouvez maintenant profiter de toutes nos fonctionnalités !</p>
+    `;
 
     try {
-      const info = await this.transporter.sendMail({
-        from: `"Maxiim" <${process.env.GMAIL_USER}>`,
-        to: email,
-        subject: `Bienvenue ${firstName} ! 🎉`,
-        html: `
-          <h1>Bienvenue ${firstName} ! 🎉</h1>
-          <p>Votre compte a été activé avec succès.</p>
-          <p>Vous pouvez maintenant profiter de toutes nos fonctionnalités !</p>
-        `,
-      });
-      console.log('✅ Welcome email sent:', info.messageId);
+      await this.sendBrevoEmail(email, `Bienvenue ${firstName} ! 🎉`, htmlContent);
+      console.log('✅ Welcome email sent to:', email);
     } catch (error) {
       console.error('❌ Error sending welcome email:', error);
     }
   }
 
   async sendPasswordResetEmail(email: string, firstName: string, resetToken: string): Promise<void> {
-    if (!this.transporter) {
-      console.log('📧 Development mode: Password reset email simulated for', email);
-      console.log('🔑 Reset token:', resetToken);
-      console.log('👤 For:', firstName);
-      return;
-    }
-
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'
       }/reset-password?token=${resetToken}`;
 
@@ -299,29 +286,16 @@ export class EmailService {
 
     try {
       console.log('📤 Sending password reset email to:', email);
-      const info = await this.transporter.sendMail({
-        from: `"" <${process.env.GMAIL_USER}>`,
-        to: email,
-        subject: '🔒 Réinitialisation de votre mot de passe',
-        text: textContent,
-        html: htmlContent,
-      });
-      console.log('✅ Password reset email sent:', info.messageId);
+      await this.sendBrevoEmail(email, '🔒 Réinitialisation de votre mot de passe', htmlContent, textContent);
       console.log('🔗 Reset link:', resetUrl);
     } catch (error: any) {
       console.error('❌ Error sending password reset email:', error.message);
-      console.error('Error code:', error.code);
       console.log('⚠️ Development mode: Email not sent but reset continues');
       console.log('🔗 Reset link:', resetUrl);
     }
   }
 
   async sendPasswordChangedEmail(email: string, firstName: string): Promise<void> {
-    if (!this.transporter) {
-      console.log('📧 Development mode: Password changed email simulated for', firstName);
-      return;
-    }
-
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -371,13 +345,8 @@ export class EmailService {
     `;
 
     try {
-      const info = await this.transporter.sendMail({
-        from: `"Maxiim" <${process.env.GMAIL_USER}>`,
-        to: email,
-        subject: '✅ Votre mot de passe a été modifié',
-        html: htmlContent,
-      });
-      console.log('✅ Password changed email sent:', info.messageId);
+      await this.sendBrevoEmail(email, '✅ Votre mot de passe a été modifié', htmlContent);
+      console.log('✅ Password changed email sent to:', email);
     } catch (error) {
       console.error('❌ Error sending password changed email:', error);
     }
@@ -386,13 +355,10 @@ export class EmailService {
     return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
   }
 
-  async sendOtpEmail(email: string, firstName: string, otp: string): Promise<void> {
-    if (!this.transporter) {
-      console.log('📧 Development mode: OTP email simulated for', email);
-      console.log('🔢 OTP:', otp);
-      console.log('👤 For:', firstName);
-      return;
-    }
+  async sendOtpEmail(email: string, firstName: string, otp: string, isApprovalEmail: boolean = false): Promise<void> {
+    const approvalText = isApprovalEmail
+      ? '<p><strong>✅ Votre compte a été approuvé par un administrateur.</strong></p>'
+      : '';
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -414,6 +380,7 @@ export class EmailService {
           </div>
           <div class="content">
             <h2>Bonjour ${firstName},</h2>
+            ${approvalText}
             <p>Votre code OTP pour vérifier votre compte Maxiim est :</p>
             <p class="otp">${otp}</p>
             <p>Entrez ce code dans l'application pour compléter votre inscription.</p>
@@ -431,7 +398,7 @@ export class EmailService {
 
     const textContent = `
       Bonjour ${firstName},
-
+      ${isApprovalEmail ? 'Votre compte a été approuvé par un administrateur.\n' : ''}
       Votre code OTP pour vérifier votre compte Maxiim est : ${otp}
 
       Entrez ce code dans l'application pour compléter votre inscription.
@@ -444,18 +411,262 @@ export class EmailService {
 
     try {
       console.log('📤 Sending OTP email to:', email);
-      const info = await this.transporter.sendMail({
-        from: `"Maxiim" <${process.env.GMAIL_USER}>`,
-        to: email,
-        subject: '🔐 Votre code OTP pour Maxiim',
-        text: textContent,
-        html: htmlContent,
-      });
-      console.log('✅ OTP email sent:', info.messageId);
+      console.log('🔐 OTP Code:', otp);
+      console.log('✉️ Is Approval Email:', isApprovalEmail);
+      console.log('📧 Email service configured:', this.isConfigured);
+      console.log('📧 Sender email:', this.senderEmail);
+      console.log('📧 Sender name:', this.senderName);
+
+      await this.sendBrevoEmail(email, '🔐 Votre code OTP pour Maxiim', htmlContent, textContent);
+      console.log('✅ OTP email sent successfully to:', email);
     } catch (error: any) {
       console.error('❌ Error sending OTP email:', error.message);
-      console.error('Error code:', error.code);
-      console.log('⚠️ Development mode: Email not sent but process continues');
+      console.error('❌ Full error:', JSON.stringify(error, null, 2));
+      console.error('❌ Error stack:', error.stack);
+      // In production, we want to know if email failed
+      if (this.isConfigured) {
+        throw new Error(`Failed to send OTP email to ${email}: ${error.message}`);
+      } else {
+        console.log('⚠️ Development mode: Email not sent but process continues');
+      }
+    }
+  }
+
+  async sendAdminRegistrationNotification(
+    adminEmail: string,
+    adminFirstName: string,
+    userFullName: string,
+    userEmail: string,
+    userPhoneNumber: string,
+    userRole: string,
+    registrationTimestamp: string
+  ): Promise<void> {
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }
+          .header { background-color: #f97316; color: white; padding: 20px; text-align: center; }
+          .content { padding: 30px 20px; }
+          .user-details {
+            background-color: #f3f4f6;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+          }
+          .detail-row {
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .detail-label { font-weight: bold; color: #374151; }
+          .otp-section {
+            background-color: #fef3c7;
+            border: 1px solid #f59e0b;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+          }
+          .otp-code {
+            font-size: 32px;
+            font-weight: bold;
+            color: #f97316;
+            letter-spacing: 2px;
+            margin: 15px 0;
+          }
+          .footer { background-color: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Nouvelle inscription - Approbation requise</h1>
+          </div>
+          <div class="content">
+            <h2>Bonjour ${adminFirstName},</h2>
+            <p>Un nouvel utilisateur s'est inscrit et nécessite votre approbation :</p>
+
+            <div class="user-details">
+              <div class="detail-row">
+                <span class="detail-label">Nom complet :</span> ${userFullName}
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Email :</span> ${userEmail}
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Téléphone :</span> ${userPhoneNumber}
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Rôle demandé :</span> ${userRole}
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Date d'inscription :</span> ${registrationTimestamp}
+              </div>
+            </div>
+
+            <div class="otp-section">
+              <p><strong>Action requise :</strong></p>
+              <p style="margin: 15px 0;">Veuillez examiner cette demande d'inscription et approuver l'utilisateur via le panneau d'administration.</p>
+              <p style="font-size: 12px; color: #666;">
+                Une fois approuvé, l'utilisateur recevra un code OTP pour vérifier son email.
+              </p>
+            </div>
+
+            <p>Prochaines étapes :</p>
+            <ol>
+              <li>Examinez les informations de l'utilisateur ci-dessus</li>
+              <li>Connectez-vous au panneau d'administration</li>
+              <li>Approuvez l'utilisateur pour lui envoyer le code OTP de vérification</li>
+            </ol>
+          </div>
+          <div class="footer">
+            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
+            <p>Système d'inscription Maxiim</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const textContent = `
+      Bonjour ${adminFirstName},
+
+      Un nouvel utilisateur s'est inscrit et nécessite votre approbation :
+
+      Nom complet : ${userFullName}
+      Email : ${userEmail}
+      Téléphone : ${userPhoneNumber}
+      Rôle demandé : ${userRole}
+      Date d'inscription : ${registrationTimestamp}
+
+      Action requise :
+      Veuillez examiner cette demande d'inscription et approuver l'utilisateur via le panneau d'administration.
+      Une fois approuvé, l'utilisateur recevra un code OTP pour vérifier son email.
+
+      Prochaines étapes :
+      1. Examinez les informations de l'utilisateur
+      2. Connectez-vous au panneau d'administration
+      3. Approuvez l'utilisateur pour lui envoyer le code OTP de vérification
+
+      Cordialement,
+      Système d'inscription Maxiim
+    `;
+
+    try {
+      console.log('📤 Sending admin registration notification to:', adminEmail);
+      await this.sendBrevoEmail(adminEmail, '🔔 Nouvelle inscription - Approbation requise', htmlContent, textContent);
+    } catch (error: any) {
+      console.error('❌ Error sending admin registration notification:', error.message);
+      console.log('⚠️ Failed to notify admin but process continues');
+    }
+  }
+
+  // Keep the old method for backwards compatibility (now used by /send-user-otp)
+  async sendAdminOtpNotification(
+    adminEmail: string,
+    adminFirstName: string,
+    userFullName: string,
+    userEmail: string,
+    userPhoneNumber: string,
+    userRole: string,
+    registrationTimestamp: string,
+    otp: string
+  ): Promise<void> {
+    // This method is no longer used in signup flow
+    // Only used if you want to notify admins when OTP is sent
+    console.log('⚠️ sendAdminOtpNotification called - this is deprecated for signup flow');
+  }
+
+  async sendRegistrationPendingEmail(
+    userEmail: string,
+    userFirstName: string,
+    userRequestedRole: string
+  ): Promise<void> {
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }
+          .header { background-color: #0ea5e9; color: white; padding: 20px; text-align: center; }
+          .content { padding: 30px 20px; }
+          .info-box {
+            background-color: #e0f2fe;
+            border: 1px solid #0ea5e9;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+          }
+          .footer { background-color: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Inscription soumise avec succès</h1>
+          </div>
+          <div class="content">
+            <h2>Bonjour ${userFirstName},</h2>
+            <p>Merci de vous être inscrit à Maxiim ! Votre demande d'inscription a été reçue.</p>
+
+            <div class="info-box">
+              <p><strong>Statut de l'inscription : En attente d'approbation</strong></p>
+              <p>Rôle demandé : <strong>${userRequestedRole}</strong></p>
+              <p>Un administrateur examinera vos informations et approuvera votre compte sous peu.</p>
+            </div>
+
+            <p><strong>Que se passe-t-il ensuite :</strong></p>
+            <ol>
+              <li>Un administrateur examinera les détails de votre inscription</li>
+              <li><strong>Consultez votre email régulièrement</strong> - Une fois approuvé, nous vous enverrons un code de vérification (OTP) par email</li>
+              <li>Entrez le code de vérification dans l'application pour activer votre compte</li>
+              <li>Une fois vérifié, vous pourrez vous connecter et utiliser toutes les fonctionnalités</li>
+            </ol>
+
+            <p><strong>Important :</strong> Ne fermez pas l'application. Vous recevrez un email avec votre code de vérification dès que votre compte sera approuvé.</p>
+          </div>
+          <div class="footer">
+            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
+            <p>Système d'inscription Maxiim</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const textContent = `
+      Bonjour ${userFirstName},
+
+      Merci de vous être inscrit à Maxiim ! Votre demande d'inscription a été reçue.
+
+      Statut de l'inscription : En attente d'approbation
+      Rôle demandé : ${userRequestedRole}
+
+      Un administrateur examinera vos informations et approuvera votre compte sous peu.
+
+      Que se passe-t-il ensuite :
+      1. Un administrateur examinera les détails de votre inscription
+      2. Consultez votre email régulièrement - Une fois approuvé, nous vous enverrons un code de vérification (OTP) par email
+      3. Entrez le code de vérification dans l'application pour activer votre compte
+      4. Une fois vérifié, vous pourrez vous connecter et utiliser toutes les fonctionnalités
+
+      IMPORTANT: Ne fermez pas l'application. Vous recevrez un email avec votre code de vérification dès que votre compte sera approuvé.
+
+      Si vous avez des questions, n'hésitez pas à contacter notre équipe de support.
+
+      Cordialement,
+      L'équipe Maxiim
+    `;
+
+    try {
+      console.log('📤 Sending registration pending email to:', userEmail);
+      await this.sendBrevoEmail(userEmail, '✅ Inscription soumise avec succès', htmlContent, textContent);
+    } catch (error: any) {
+      console.error('❌ Error sending registration pending email:', error.message);
+      console.log('⚠️ Failed to send pending email but process continues');
     }
   }
 }
