@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diwane Admin — Dashboard</title>
+  <link rel="stylesheet" href="assets/admin.css">
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <span>Diwane</span>
+      <span class="badge-admin">Admin</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="dashboard.html" class="active">📊 Dashboard</a></li>
+      <li><a href="courtiers.html">👤 Courtiers</a></li>
+      <li><a href="avis.html">⭐ Avis</a></li>
+      <li><a href="#" id="logout-link">🚪 Déconnexion</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <h1>Vue d'ensemble</h1>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="nb-courtiers">—</div>
+        <div class="stat-label">Courtiers inscrits</div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-value" id="nb-en-attente">—</div>
+        <div class="stat-label">Vérifications en attente</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-value" id="nb-verifies">—</div>
+        <div class="stat-label">Courtiers vérifiés</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="nb-biens">—</div>
+        <div class="stat-label">Annonces actives</div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-value" id="nb-avis-attente">—</div>
+        <div class="stat-label">Avis à modérer</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-value" id="revenus">—</div>
+        <div class="stat-label">Revenus ce mois (FCFA)</div>
+      </div>
+    </div>
+
+    <section>
+      <h2>Vérifications en attente <span id="badge-attente" class="badge-count"></span></h2>
+      <div id="verifications-list" class="table-container">
+        <p class="loading">Chargement…</p>
+      </div>
+      <a href="courtiers.html" class="btn-link">Voir tous les courtiers →</a>
+    </section>
+  </main>
+
+  <script src="assets/admin.js"></script>
+</body>
+</html>

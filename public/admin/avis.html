@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diwane Admin — Avis</title>
+  <link rel="stylesheet" href="assets/admin.css">
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <span>Diwane</span>
+      <span class="badge-admin">Admin</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="dashboard.html">📊 Dashboard</a></li>
+      <li><a href="courtiers.html">👤 Courtiers</a></li>
+      <li><a href="avis.html" class="active">⭐ Avis</a></li>
+      <li><a href="#" id="logout-link">🚪 Déconnexion</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <h1>Modération des avis</h1>
+
+    <div class="filters-row">
+      <select id="filter-avis-statut">
+        <option value="en_attente">En attente de modération</option>
+        <option value="publie">Publiés</option>
+        <option value="supprime">Supprimés</option>
+      </select>
+    </div>
+
+    <div id="avis-list">
+      <p class="loading">Chargement…</p>
+    </div>
+  </main>
+
+  <script src="assets/admin.js"></script>
+</body>
+</html>

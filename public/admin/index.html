@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diwane Admin — Connexion</title>
+  <link rel="stylesheet" href="assets/admin.css">
+  <script src="assets/admin.js" defer></script>
+</head>
+<body class="login-page">
+  <div class="login-card">
+    <div class="logo">
+      <span class="logo-text">Diwane</span>
+      <span class="logo-badge">Admin</span>
+    </div>
+    <h1>Connexion administrateur</h1>
+    <div id="error-msg" class="error-msg hidden"></div>
+    <form id="login-form" method="post" action="#" onsubmit="return false;">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="email" placeholder="admin@diwane.sn" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Mot de passe</label>
+        <input type="password" id="password" required autocomplete="current-password">
+      </div>
+      <button type="button" class="btn-primary" id="login-btn" onclick="doLogin()">Se connecter</button>
+    </form>
+  </div>
+</body>
+</html>

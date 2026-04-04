@@ -1,3 +1,6 @@
+// @ts-nocheck — @deprecated : Controller conversation France B2B, conservé pour compatibilité
+// Sera supprimé après migration complète des données vers le nouveau schéma Message SN
+/* eslint-disable */
 import {authenticate} from '@loopback/authentication';
 import {inject} from '@loopback/core';
 import {

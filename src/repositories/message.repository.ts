@@ -1,29 +1,46 @@
-import {Getter, inject} from '@loopback/core';
-import {BelongsToAccessor, DefaultCrudRepository, repository} from '@loopback/repository';
+/**
+ * REPOSITORY MESSAGE — Plateforme Immobilière Sénégal
+ * Remplace l'ancienne version liée à Conversation + Utilisateur
+ */
+import {inject} from '@loopback/core';
+import {DefaultCrudRepository} from '@loopback/repository';
 import {ImmoApiDataSource} from '../datasources';
-import {Conversation, Message, MessageRelations, Utilisateur} from '../models';
-import {ConversationRepository} from './conversation.repository';
-import {UtilisateurRepository} from './utilisateur.repository';
+import {Message, MessageRelations} from '../models';
 
 export class MessageRepository extends DefaultCrudRepository<
   Message,
   typeof Message.prototype.id,
   MessageRelations
 > {
-  public readonly conversation: BelongsToAccessor<Conversation, typeof Message.prototype.id>;
-  public readonly sender: BelongsToAccessor<Utilisateur, typeof Message.prototype.id>;
-
   constructor(
     @inject('datasources.immoApi') dataSource: ImmoApiDataSource,
-    @repository.getter('ConversationRepository') protected conversationRepositoryGetter: Getter<ConversationRepository>,
-    @repository.getter('UtilisateurRepository') protected utilisateurRepositoryGetter: Getter<UtilisateurRepository>,
   ) {
     super(Message, dataSource);
+  }
 
-    this.conversation = this.createBelongsToAccessorFor('conversation', conversationRepositoryGetter);
-    this.registerInclusionResolver('conversation', this.conversation.inclusionResolver);
+  // Tous les messages d'une conversation, triés du plus récent
+  async findByConversation(conversationId: string, limit = 50): Promise<Message[]> {
+    return this.find({
+      where: {conversation_id: conversationId} as any,
+      order: ['createdAt DESC'],
+      limit,
+    });
+  }
 
-    this.sender = this.createBelongsToAccessorFor('sender', utilisateurRepositoryGetter);
-    this.registerInclusionResolver('sender', this.sender.inclusionResolver);
+  // Nombre de messages non lus pour un destinataire
+  async countUnread(destinataireId: string): Promise<number> {
+    const result = await this.count({
+      destinataire_id: destinataireId,
+      lu: false,
+    } as any);
+    return result.count;
+  }
+
+  // Marque tous les messages d'une conversation comme lus pour un destinataire
+  async markConversationAsRead(conversationId: string, destinataireId: string): Promise<void> {
+    await this.updateAll(
+      {lu: true, date_lecture: new Date()} as any,
+      {conversation_id: conversationId, destinataire_id: destinataireId, lu: false} as any,
+    );
   }
 }

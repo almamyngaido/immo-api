@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diwane Admin — Courtiers</title>
+  <link rel="stylesheet" href="assets/admin.css">
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <span>Diwane</span>
+      <span class="badge-admin">Admin</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="dashboard.html">📊 Dashboard</a></li>
+      <li><a href="courtiers.html" class="active">👤 Courtiers</a></li>
+      <li><a href="avis.html">⭐ Avis</a></li>
+      <li><a href="#" id="logout-link">🚪 Déconnexion</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <h1>Vérification des courtiers</h1>
+
+    <div class="filters-row">
+      <select id="filter-statut" onchange="chargerCourtiers()">
+        <option value="en_attente">En attente</option>
+        <option value="verifie">Vérifiés</option>
+        <option value="rejete">Rejetés</option>
+        <option value="tous">Tous avec dossier</option>
+      </select>
+    </div>
+
+    <div id="courtiers-list" class="table-container">
+      <p class="loading">Chargement…</p>
+    </div>
+  </main>
+
+  <!-- Modal vérification CNI -->
+  <div id="modal-verification" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 id="modal-courtier-nom">Vérification</h2>
+          <span id="modal-statut-actuel"></span>
+        </div>
+        <button onclick="fermerModal()" class="btn-close">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="courtier-info">
+          <p><strong>Email :</strong> <span id="modal-email">—</span></p>
+          <p><strong>Téléphone :</strong> <span id="modal-telephone">—</span></p>
+          <p><strong>Soumis le :</strong> <span id="modal-date">—</span></p>
+        </div>
+
+        <div class="documents-section">
+          <h3>Documents soumis</h3>
+          <div class="docs-grid">
+            <div>
+              <p class="doc-label">CNI Recto</p>
+              <div id="modal-cni-recto"><div class="doc-loading">Chargement…</div></div>
+            </div>
+            <div>
+              <p class="doc-label">CNI Verso</p>
+              <div id="modal-cni-verso"><div class="doc-loading">Chargement…</div></div>
+            </div>
+          </div>
+          <div id="modal-registre"></div>
+        </div>
+
+        <div class="action-section">
+          <h3>Décision</h3>
+          <textarea id="modal-note" class="note-input" rows="2"
+            placeholder="Motif du rejet (obligatoire en cas de rejet)…"></textarea>
+          <div class="action-btns" style="margin-top:12px">
+            <button class="btn-sm btn-approve" onclick="approuver()">✓ Approuver</button>
+            <button class="btn-sm btn-reject" onclick="rejeter()">✕ Rejeter</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/admin.js"></script>
+</body>
+</html>

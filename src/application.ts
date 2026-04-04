@@ -17,6 +17,8 @@ export {ApplicationConfig};
 import {AuthenticationComponent} from '@loopback/authentication';
 import {JWTAuthenticationComponent} from '@loopback/authentication-jwt';
 import {EmailService} from './services/mailer';
+import {FirebaseStorageService} from './services/firebase-storage.service';
+import {WaveService} from './services/wave.service';
 
 export class ImmoApiApplication extends BootMixin(
   ServiceMixin(RepositoryMixin(RestApplication)),
@@ -43,6 +45,8 @@ export class ImmoApiApplication extends BootMixin(
 
     // Bind services with singleton scope to prevent multiple instances
     this.bind('services.EmailService').toClass(EmailService).inScope(BindingScope.SINGLETON);
+    this.bind('services.WaveService').toClass(WaveService).inScope(BindingScope.SINGLETON);
+    this.bind('services.FirebaseStorageService').toClass(FirebaseStorageService).inScope(BindingScope.SINGLETON);
 
     // Mount authentication component first
     this.component(AuthenticationComponent);
@@ -53,6 +57,9 @@ export class ImmoApiApplication extends BootMixin(
 
     // Set up default home page
     this.static('/', path.join(__dirname, '../public'));
+
+    // Serve admin dashboard
+    this.static('/admin', path.join(__dirname, '../public/admin'));
 
     // Serve uploaded files
     this.static('/uploads', path.join(__dirname, '../uploads'));

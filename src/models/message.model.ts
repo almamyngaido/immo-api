@@ -1,81 +1,79 @@
-import {belongsTo, Entity, model, property} from '@loopback/repository';
-import {Conversation} from './conversation.model';
-import {Utilisateur} from './utilisateur.model';
-
 /**
- * Message model
- * Represents a single message in a conversation
+ * MODÈLE MESSAGE — Chat intégré courtier ↔ acheteur
+ * conversation_id = `${userId1}_${userId2}_${bienId}` (trié alphabétiquement)
+ * Plateforme Immobilière Sénégal (LoopBack 4)
+ * Remplace : message.model.ts (ancienne version liée à Conversation)
  */
+import {Entity, model, property} from '@loopback/repository';
+
+@model()
+class PropositionVisite {
+  @property({type: 'date'})
+  date?: Date;
+
+  @property({type: 'boolean'})
+  acceptee?: boolean;
+}
+
 @model({
   settings: {
-    strict: true,
+    mongodb: {collection: 'messages'},
+    strict: false,
     indexes: {
-      // Index for finding messages in a conversation, sorted by timestamp
-      conversationMessages: {keys: {conversationId: 1, timestamp: 1}},
-      // Index for finding unread messages by user
-      unreadMessages: {keys: {conversationId: 1, isRead: 1}},
+      conversation_date: {keys: {conversation_id: 1, createdAt: -1}},
+      destinataire_lu: {keys: {destinataire_id: 1, lu: 1}},
     },
   },
 })
 export class Message extends Entity {
-  @property({
-    type: 'string',
-    id: true,
-    generated: true,
-  })
+  @property({type: 'string', id: true, generated: true, mongodb: {dataType: 'ObjectId'}})
   id?: string;
 
-  @belongsTo(() => Conversation)
-  conversationId: string;
+  // conversation_id = ${userId1}_${userId2}_${bienId} (tri alphabétique)
+  @property({type: 'string', required: true, index: true})
+  conversation_id: string;
 
-  @belongsTo(() => Utilisateur)
-  senderId: string;
+  @property({type: 'string', mongodb: {dataType: 'ObjectId'}})
+  bien_id?: string;
 
-  @property({
-    type: 'string',
-    required: true,
-    jsonSchema: {
-      minLength: 1,
-      maxLength: 5000, // Limit message length
-    },
-  })
-  content: string;
+  @property({type: 'string', required: true, mongodb: {dataType: 'ObjectId'}})
+  expediteur_id: string;
 
-  @property({
-    type: 'date',
-    default: () => new Date().toISOString(),
-  })
-  timestamp: string;
+  @property({type: 'string', required: true, mongodb: {dataType: 'ObjectId'}})
+  destinataire_id: string;
 
-  @property({
-    type: 'boolean',
-    default: false,
-  })
-  isRead: boolean;
-
-  @property({
-    type: 'date',
-  })
-  readAt?: string; // When the message was read
+  @property({type: 'string', required: true, jsonSchema: {maxLength: 1000}})
+  contenu: string;
 
   @property({
     type: 'string',
+    default: 'texte',
+    jsonSchema: {enum: ['texte', 'image', 'document', 'proposition_visite']},
   })
-  attachmentUrl?: string; // Optional: for future image attachments
+  type?: string;
 
-  @property({
-    type: 'string',
-  })
-  attachmentType?: string; // Optional: 'image', 'document', etc.
+  @property({type: 'string'})
+  media_url?: string; // URL CDN si image ou document
+
+  @property({type: 'object'})
+  proposition_visite?: PropositionVisite;
+
+  @property({type: 'boolean', default: false})
+  lu?: boolean;
+
+  @property({type: 'date'})
+  date_lecture?: Date;
+
+  @property({type: 'date'})
+  createdAt?: Date;
+
+  @property({type: 'date'})
+  updatedAt?: Date;
 
   constructor(data?: Partial<Message>) {
     super(data);
   }
 }
 
-export interface MessageRelations {
-  conversation?: Conversation;
-  sender?: Utilisateur;
-}
-
+export interface MessageRelations {}
 export type MessageWithRelations = Message & MessageRelations;

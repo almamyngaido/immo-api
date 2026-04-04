@@ -1,4 +1,5 @@
 import {ApplicationConfig, ImmoApiApplication} from './application';
+import {demarrerJobsExpiration} from './jobs/expiration.job';
 
 export * from './application';
 
@@ -10,6 +11,11 @@ export async function main(options: ApplicationConfig = {}) {
   const url = app.restServer.url;
   console.log(`Server is running at ${url}`);
   console.log(`Try ${url}/ping`);
+
+  // Démarrer le job d'expiration (abonnements + boosts)
+  const userRepo = await app.get('repositories.UserRepository');
+  const bienRepo = await app.get('repositories.BienRepository');
+  demarrerJobsExpiration(userRepo, bienRepo);
 
   return app;
 }
