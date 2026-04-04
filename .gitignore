@@ -69,3 +69,9 @@ firebase-service-account.json
 
 # Emacs auto-save file
 \#*#
+
+# Uploaded files (local dev only — use Firebase Storage in prod)
+/uploads/
+
+# AI context
+AI_CONTEXT.md
