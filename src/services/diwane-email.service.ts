@@ -1,16 +1,18 @@
 /**
- * DIWANE — Service Email (Nodemailer + Gmail SMTP)
- * Env vars requis :
- *   GMAIL_USER=votre@gmail.com
- *   GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx  (mot de passe d'application Google)
- *   APP_URL=https://immo-api-production-dba2.up.railway.app
+ * DIWANE — Service Email (Brevo HTTP API)
+ * Utilise @getbrevo/brevo (HTTPS — compatible Railway)
+ *
+ * Env vars Railway :
+ *   BREVO_API_KEY=xkeysib-...
+ *   BREVO_SENDER_EMAIL=intelligtech@gmail.com   (doit être vérifié sur Brevo)
+ *   BREVO_SENDER_NAME=Diwane                    (optionnel)
  */
-import * as nodemailer from 'nodemailer';
+import * as brevo from '@getbrevo/brevo';
 
-const APP_URL = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+const APP_URL  = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const APP_NAME = 'Diwane';
-const NAVY   = '#1B2A4A';
-const ORANGE = '#E8621A';
+const NAVY     = '#1B2A4A';
+const ORANGE   = '#E8621A';
 
 function baseTemplate(body: string): string {
   return `<!DOCTYPE html>
@@ -19,15 +21,14 @@ function baseTemplate(body: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { margin:0; padding:0; background:#f4f6f9; font-family:Arial,sans-serif; }
-    .wrap { max-width:580px; margin:32px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,.08); }
-    .header { background:${NAVY}; padding:28px 32px; text-align:center; }
-    .header h1 { margin:0; color:#fff; font-size:22px; letter-spacing:.5px; }
-    .content { padding:32px; color:#333; font-size:15px; line-height:1.6; }
-    .btn { display:inline-block; background:${ORANGE}; color:#fff !important; text-decoration:none; padding:13px 28px; border-radius:8px; font-weight:700; font-size:15px; margin:20px 0; }
-    .code { font-size:28px; font-weight:bold; color:${NAVY}; letter-spacing:6px; text-align:center; margin:20px 0; padding:16px; background:#f4f6f9; border-radius:8px; }
-    .footer { background:#f4f6f9; padding:20px 32px; text-align:center; font-size:12px; color:#999; }
-    .divider { border:none; border-top:1px solid #eee; margin:24px 0; }
+    body{margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif}
+    .wrap{max-width:580px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+    .header{background:${NAVY};padding:28px 32px;text-align:center}
+    .header h1{margin:0;color:#fff;font-size:22px;letter-spacing:.5px}
+    .content{padding:32px;color:#333;font-size:15px;line-height:1.6}
+    .btn{display:inline-block;background:${ORANGE};color:#fff!important;text-decoration:none;padding:13px 28px;border-radius:8px;font-weight:700;font-size:15px;margin:20px 0}
+    .footer{background:#f4f6f9;padding:20px 32px;text-align:center;font-size:12px;color:#999}
+    .divider{border:none;border-top:1px solid #eee;margin:24px 0}
   </style>
 </head>
 <body>
@@ -40,37 +41,37 @@ function baseTemplate(body: string): string {
 }
 
 class DiwaneEmailService {
-  private transporter: nodemailer.Transporter | null = null;
-  private from: string;
+  private api: brevo.TransactionalEmailsApi | null = null;
+  private senderEmail: string;
+  private senderName: string;
 
   constructor() {
-    const user = process.env.GMAIL_USER;
-    const pass = process.env.GMAIL_APP_PASSWORD;
-    this.from = `${APP_NAME} <${user ?? 'no-reply@diwane.sn'}>`;
+    const apiKey       = process.env.BREVO_API_KEY;
+    this.senderEmail   = process.env.BREVO_SENDER_EMAIL ?? 'intelligtech@gmail.com';
+    this.senderName    = process.env.BREVO_SENDER_NAME  ?? APP_NAME;
 
-    if (user && pass) {
-      this.transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {user, pass},
-      });
-      console.log(`✅ [DiwaneEmail] Gmail SMTP configuré : ${user}`);
+    if (apiKey) {
+      this.api = new brevo.TransactionalEmailsApi();
+      this.api.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, apiKey);
+      console.log(`✅ [DiwaneEmail] Brevo configuré — expéditeur: ${this.senderEmail}`);
     } else {
-      console.warn('⚠️ [DiwaneEmail] GMAIL_USER / GMAIL_APP_PASSWORD manquants — emails simulés');
+      console.warn('⚠️ [DiwaneEmail] BREVO_API_KEY manquant — emails simulés dans les logs');
     }
   }
 
   private async send(to: string, subject: string, html: string): Promise<void> {
-    if (!this.transporter) {
+    if (!this.api) {
       console.log(`[DiwaneEmail DEV] À: ${to} | Sujet: ${subject}`);
       return;
     }
-    try {
-      await this.transporter.sendMail({from: this.from, to, subject, html});
-      console.log(`[DiwaneEmail] ✅ Envoyé à ${to}`);
-    } catch (e) {
-      console.error(`[DiwaneEmail] ❌ Erreur envoi à ${to}:`, e);
-      throw e;
-    }
+    const mail = new brevo.SendSmtpEmail();
+    mail.sender  = {name: this.senderName, email: this.senderEmail};
+    mail.to      = [{email: to}];
+    mail.subject = subject;
+    mail.htmlContent = html;
+
+    await this.api.sendTransacEmail(mail);
+    console.log(`[DiwaneEmail] ✅ Envoyé à ${to}`);
   }
 
   // ── Vérification email ────────────────────────────────────────────────────
@@ -91,66 +92,52 @@ class DiwaneEmailService {
   // ── Invitation agence (utilisateur existant) ──────────────────────────────
 
   async envoyerInvitationExistant(
-    email: string,
-    prenomInvite: string,
-    nomAgence: string,
-    proprietaireNom: string,
-    token: string,
+    email: string, prenomInvite: string, nomAgence: string,
+    proprietaireNom: string, token: string,
   ): Promise<void> {
     const urlRejoindre = `${APP_URL}/agence/rejoindre?token=${token}`;
     const html = baseTemplate(`
       <h2>Bonjour ${prenomInvite} 👋</h2>
       <p><strong>${proprietaireNom}</strong> vous invite à rejoindre l'agence <strong>${nomAgence}</strong> sur ${APP_NAME}.</p>
-      <p>En acceptant, votre compte passera automatiquement au <strong>plan Pro</strong> et vous bénéficierez de toutes ses fonctionnalités.</p>
+      <p>En acceptant, votre compte passera automatiquement au <strong>plan Pro</strong>.</p>
       <div style="text-align:center"><a href="${urlRejoindre}" class="btn">Rejoindre l'agence</a></div>
       <hr class="divider">
       <p style="font-size:13px;color:#888">
         Vous pouvez aussi accepter directement depuis votre profil dans l'application Diwane.<br>
-        Invitation valable 7 jours. Si vous ne souhaitez pas rejoindre cette agence, ignorez cet email.
+        Invitation valable 7 jours.
       </p>
     `);
-    await this.send(email, `Invitation à rejoindre ${nomAgence} sur ${APP_NAME}`, html);
+    await this.send(email, `Invitation à rejoindre ${nomAgence} — ${APP_NAME}`, html);
   }
 
   // ── Invitation agence (nouveau compte) ───────────────────────────────────
 
   async envoyerInvitationNouveauCompte(
-    email: string,
-    prenomInvite: string,
-    nomAgence: string,
-    proprietaireNom: string,
-    token: string,
+    email: string, prenomInvite: string, nomAgence: string,
+    proprietaireNom: string, token: string,
   ): Promise<void> {
     const urlCreer = `${APP_URL}/agence/rejoindre?token=${token}`;
     const html = baseTemplate(`
       <h2>Bonjour ${prenomInvite} 👋</h2>
       <p><strong>${proprietaireNom}</strong> vous invite à rejoindre l'agence <strong>${nomAgence}</strong> sur ${APP_NAME}.</p>
-      <p>Cliquez ci-dessous pour créer votre compte et rejoindre l'agence directement avec le <strong>plan Pro</strong> :</p>
+      <p>Cliquez ci-dessous pour créer votre compte et rejoindre l'agence avec le <strong>plan Pro</strong> :</p>
       <div style="text-align:center"><a href="${urlCreer}" class="btn">Créer mon compte et rejoindre</a></div>
       <hr class="divider">
-      <p style="font-size:13px;color:#888">Invitation valable 7 jours. Si vous ne souhaitez pas rejoindre cette agence, ignorez cet email.</p>
+      <p style="font-size:13px;color:#888">Invitation valable 7 jours.</p>
     `);
-    await this.send(email, `Invitation à rejoindre ${nomAgence} sur ${APP_NAME}`, html);
+    await this.send(email, `Invitation à rejoindre ${nomAgence} — ${APP_NAME}`, html);
   }
 
-  // ── Confirmation rejoindre agence ────────────────────────────────────────
+  // ── Confirmation rejoindre ────────────────────────────────────────────────
 
-  async envoyerConfirmationRejoindre(
-    email: string,
-    prenom: string,
-    nomAgence: string,
-  ): Promise<void> {
+  async envoyerConfirmationRejoindre(email: string, prenom: string, nomAgence: string): Promise<void> {
     const html = baseTemplate(`
       <h2>Bienvenue dans l'agence ${nomAgence} ! 🎉</h2>
-      <p>Bonjour ${prenom},</p>
-      <p>Vous faites maintenant partie de l'agence <strong>${nomAgence}</strong>. Votre compte est passé au <strong>plan Pro</strong>.</p>
-      <p>Connectez-vous à l'application Diwane pour commencer à publier des annonces sous le nom de l'agence.</p>
-      <hr class="divider">
-      <p style="font-size:13px;color:#888">Si vous n'êtes pas à l'origine de cette action, contactez immédiatement le support.</p>
+      <p>Bonjour ${prenom}, vous faites maintenant partie de l'agence <strong>${nomAgence}</strong>.</p>
+      <p>Votre compte est passé au <strong>plan Pro</strong>. Connectez-vous à l'application Diwane pour commencer.</p>
     `);
     await this.send(email, `Vous avez rejoint ${nomAgence} — ${APP_NAME}`, html);
   }
 }
 
-// Singleton
 export const diwaneEmail = new DiwaneEmailService();

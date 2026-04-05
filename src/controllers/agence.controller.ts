@@ -188,21 +188,19 @@ export class AgenceController {
       createdAt:  new Date(),
     } as any);
 
-    // Envoyer l'email approprié
-    if (userExistant) {
-      await diwaneEmail.envoyerInvitationExistant(
-        emailLower, body.prenom, nomAgence, proprietaireNom, token,
-      );
-    } else {
-      await diwaneEmail.envoyerInvitationNouveauCompte(
-        emailLower, body.prenom, nomAgence, proprietaireNom, token,
-      );
-    }
+    // Envoyer l'email (best-effort — ne bloque pas la réponse)
+    const emailPromise = userExistant
+      ? diwaneEmail.envoyerInvitationExistant(emailLower, body.prenom, nomAgence, proprietaireNom, token)
+      : diwaneEmail.envoyerInvitationNouveauCompte(emailLower, body.prenom, nomAgence, proprietaireNom, token);
+
+    emailPromise.catch(e => {
+      console.error(`[Agence] Email invitation échoué (non-bloquant): ${e.message}`);
+    });
 
     return {
       message: userExistant
-        ? 'Invitation envoyée. L\'utilisateur peut accepter depuis l\'application ou par email.'
-        : 'Invitation envoyée. L\'utilisateur recevra un lien pour créer son compte.',
+        ? 'Invitation créée. L\'utilisateur peut accepter depuis l\'application ou par email.'
+        : 'Invitation créée. L\'utilisateur recevra un lien pour créer son compte.',
       utilisateur_existant: !!userExistant,
     };
   }
