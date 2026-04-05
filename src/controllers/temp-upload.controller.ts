@@ -146,14 +146,16 @@ export class TempUploadController {
 
           console.log(`📸 Processing ${files.length} temporary file(s)`);
 
+          const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
           const uploadedFiles = [];
           for (const file of files) {
             const relativePath = `uploads/bien-immos/${file.filename}`;
+            const fullUrl = `${appUrl}/${relativePath}`;
 
             uploadedFiles.push({
               filename: file.filename,
               originalName: file.originalname,
-              url: relativePath,
+              url: fullUrl,
               path: relativePath,
               size: file.size,
               mimetype: file.mimetype,
