@@ -326,7 +326,7 @@ export class PaymentController {
     @param.path.string('transactionId') transactionId: string,
     @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<{ok: boolean}> {
-    if (process.env.NODE_ENV === 'production') throw new HttpErrors.Forbidden();
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEV_PAYMENTS !== 'true') throw new HttpErrors.Forbidden();
 
     // Pour les faux IDs dev_ on crée une transaction factice en mémoire et on confirme
     if (transactionId.startsWith('dev_')) {
