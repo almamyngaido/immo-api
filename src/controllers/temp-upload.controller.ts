@@ -7,70 +7,59 @@ import {
   requestBody,
 } from '@loopback/rest';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import {v2 as cloudinary} from 'cloudinary';
+import {Readable} from 'stream';
 
-// Configure multer storage for temporary uploads
-const uploadDir = path.join(__dirname, '../../uploads/bien-immos');
-
-// Ensure upload directory exists
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, {recursive: true});
-  console.log('✅ Created uploads directory:', uploadDir);
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, uniqueSuffix + ext);
-  },
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME ?? 'delfon5lw',
+  api_key:    process.env.CLOUDINARY_API_KEY    ?? '224758895562585',
+  api_secret: process.env.CLOUDINARY_API_SECRET ?? '6QgtDOmncOh0g-WbkQP47LdP_NE',
 });
 
+// Use memory storage — files go to Cloudinary, not disk
 const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
+  storage: multer.memoryStorage(),
+  limits: {fileSize: 10 * 1024 * 1024}, // 10MB
   fileFilter: (req, file, cb) => {
-    console.log('🔍 Temp file upload validation:');
-    console.log('   - Original name:', file.originalname);
-    console.log('   - MIME type:', file.mimetype);
-    console.log('   - Field name:', file.fieldname);
-
     const allowedMimes = [
-      'image/jpeg',
-      'image/jpg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-      'application/octet-stream', // Flutter Web sometimes sends this
+      'image/jpeg', 'image/jpg', 'image/png',
+      'image/gif', 'image/webp',
+      'application/octet-stream',
     ];
-
-    // Also check file extension as fallback
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    const fileExt = file.originalname.toLowerCase().match(/\.[^.]+$/)?.[0];
-
-    const validMime = allowedMimes.includes(file.mimetype);
-    const validExt = fileExt && allowedExtensions.includes(fileExt);
-
-    if (validMime || validExt) {
-      console.log('✅ File validation passed');
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const ext = file.originalname.toLowerCase().match(/\.[^.]+$/)?.[0];
+    if (allowedMimes.includes(file.mimetype) || (ext && allowedExts.includes(ext))) {
       cb(null, true);
     } else {
-      console.log('❌ File validation failed');
-      console.log('   - MIME not in allowed list:', !validMime);
-      console.log('   - Extension not allowed:', !validExt);
-      cb(new Error(`Invalid file type. Received: ${file.mimetype}, Extension: ${fileExt}`));
+      cb(new Error(`Invalid file type. Received: ${file.mimetype}`));
     }
   },
 });
 
+function uploadToCloudinary(buffer: Buffer, filename: string): Promise<{url: string; public_id: string}> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'diwane/biens',
+        public_id: `${Date.now()}-${filename.replace(/\.[^.]+$/, '')}`,
+        resource_type: 'image',
+        transformation: [{quality: 'auto', fetch_format: 'auto'}],
+      },
+      (error, result) => {
+        if (error || !result) return reject(error ?? new Error('Cloudinary upload failed'));
+        resolve({url: result.secure_url, public_id: result.public_id});
+      },
+    );
+    const readable = new Readable();
+    readable.push(buffer);
+    readable.push(null);
+    readable.pipe(stream);
+  });
+}
+
 /**
- * Controller for temporary file uploads (before BienImmo creation)
+ * Controller for temporary file uploads — stores images on Cloudinary
  */
 export class TempUploadController {
   constructor() {}
@@ -78,7 +67,7 @@ export class TempUploadController {
   @post('/uploads/temp', {
     responses: {
       200: {
-        description: 'Temporary image upload (no BienImmo ID required)',
+        description: 'Temporary image upload (Cloudinary)',
         content: {
           'application/json': {
             schema: {
@@ -90,11 +79,11 @@ export class TempUploadController {
                   items: {
                     type: 'object',
                     properties: {
-                      filename: {type: 'string'},
-                      url: {type: 'string'},
-                      path: {type: 'string'},
-                      size: {type: 'number'},
-                      mimetype: {type: 'string'},
+                      filename:   {type: 'string'},
+                      url:        {type: 'string'},
+                      public_id:  {type: 'string'},
+                      size:       {type: 'number'},
+                      mimetype:   {type: 'string'},
                     },
                   },
                 },
@@ -112,15 +101,7 @@ export class TempUploadController {
       content: {
         'multipart/form-data': {
           'x-parser': 'stream',
-          schema: {
-            type: 'object',
-            properties: {
-              file: {
-                type: 'string',
-                format: 'binary',
-              },
-            },
-          },
+          schema: {type: 'object', properties: {file: {type: 'string', format: 'binary'}}},
         },
       },
     })
@@ -128,49 +109,38 @@ export class TempUploadController {
     @inject(RestBindings.Http.RESPONSE) response: Response,
   ): Promise<object> {
     return new Promise<object>((resolve, reject) => {
-      console.log('📸 Temp upload request received');
+      console.log('📸 Temp upload request received (Cloudinary)');
 
       upload.array('file', 10)(request, response, async (err: any) => {
         if (err) {
-          console.error('❌ Temp upload error:', err);
+          console.error('❌ Multer error:', err);
           return reject(err);
         }
 
         try {
           const files = (request as any).files as Express.Multer.File[];
-
           if (!files || files.length === 0) {
-            console.log('❌ No files received in request');
             return reject(new Error('No files uploaded'));
           }
 
-          console.log(`📸 Processing ${files.length} temporary file(s)`);
+          console.log(`📸 Uploading ${files.length} file(s) to Cloudinary`);
 
-          const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
           const uploadedFiles = [];
           for (const file of files) {
-            const relativePath = `uploads/bien-immos/${file.filename}`;
-            const fullUrl = `${appUrl}/${relativePath}`;
-
+            const {url, public_id} = await uploadToCloudinary(file.buffer, file.originalname);
             uploadedFiles.push({
-              filename: file.filename,
-              originalName: file.originalname,
-              url: fullUrl,
-              path: relativePath,
-              size: file.size,
-              mimetype: file.mimetype,
+              filename:  public_id,
+              url,
+              public_id,
+              size:      file.size,
+              mimetype:  file.mimetype,
             });
-
-            console.log(`✅ Temp uploaded: ${file.filename} (${file.size} bytes)`);
+            console.log(`✅ Cloudinary upload: ${url}`);
           }
 
-          resolve({
-            success: true,
-            message: `${files.length} file(s) uploaded successfully`,
-            files: uploadedFiles,
-          });
+          resolve({success: true, message: `${files.length} file(s) uploaded`, files: uploadedFiles});
         } catch (error) {
-          console.error('❌ Error processing temp upload:', error);
+          console.error('❌ Cloudinary upload error:', error);
           reject(error);
         }
       });
