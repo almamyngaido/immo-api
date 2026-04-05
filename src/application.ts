@@ -26,6 +26,7 @@ const isProd = process.env.NODE_ENV === 'production';
 // Origines autorisées en production
 const ALLOWED_ORIGINS = [
   'https://immo-api-production-dba2.up.railway.app',
+  'https://maxim-flutter.vercel.app',
 ];
 
 // En dev, autoriser tous les localhost (Flutter web, Chrome, etc.)
