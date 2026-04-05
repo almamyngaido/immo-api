@@ -59,16 +59,18 @@ class DiwaneEmailService {
     }
   }
 
-  private async send(to: string, subject: string, html: string): Promise<void> {
+  private async send(to: string, subject: string, html: string, text: string): Promise<void> {
     if (!this.api) {
-      console.log(`[DiwaneEmail DEV] À: ${to} | Sujet: ${subject}`);
+      console.log(`[DiwaneEmail DEV] À: ${to} | Sujet: ${subject}\n${text}`);
       return;
     }
     const mail = new brevo.SendSmtpEmail();
-    mail.sender  = {name: this.senderName, email: this.senderEmail};
-    mail.to      = [{email: to}];
-    mail.subject = subject;
+    mail.sender      = {name: this.senderName, email: this.senderEmail};
+    mail.replyTo     = {email: this.senderEmail, name: this.senderName};
+    mail.to          = [{email: to}];
+    mail.subject     = subject;
     mail.htmlContent = html;
+    mail.textContent = text; // version texte brut — réduit le score spam
 
     await this.api.sendTransacEmail(mail);
     console.log(`[DiwaneEmail] ✅ Envoyé à ${to}`);
@@ -79,14 +81,15 @@ class DiwaneEmailService {
   async envoyerVerification(email: string, prenom: string, token: string): Promise<void> {
     const url = `${APP_URL}/api/auth/verifier-email?token=${token}`;
     const html = baseTemplate(`
-      <h2>Bonjour ${prenom} 👋</h2>
-      <p>Merci de vous être inscrit sur <strong>${APP_NAME}</strong>.</p>
-      <p>Cliquez sur le bouton ci-dessous pour vérifier votre adresse email :</p>
-      <div style="text-align:center"><a href="${url}" class="btn">Vérifier mon email</a></div>
+      <h2>Bonjour ${prenom},</h2>
+      <p>Merci de vous être inscrit sur <strong>${APP_NAME}</strong>, la plateforme immobilière au Sénégal.</p>
+      <p>Pour activer votre compte, veuillez confirmer votre adresse email :</p>
+      <div style="text-align:center"><a href="${url}" class="btn">Confirmer mon adresse email</a></div>
       <hr class="divider">
-      <p style="font-size:13px;color:#888">Lien valable 24h. Si vous n'êtes pas à l'origine de cette inscription, ignorez cet email.</p>
+      <p style="font-size:13px;color:#888">Ce lien est valable 24 heures. Si vous n'avez pas créé de compte sur ${APP_NAME}, vous pouvez ignorer cet email.</p>
     `);
-    await this.send(email, `Vérifiez votre email — ${APP_NAME}`, html);
+    const text = `Bonjour ${prenom},\n\nMerci de vous être inscrit sur ${APP_NAME}.\n\nPour activer votre compte, copiez ce lien dans votre navigateur :\n${url}\n\nCe lien est valable 24 heures.\n\nSi vous n'avez pas créé de compte, ignorez cet email.\n\n— L'équipe ${APP_NAME}`;
+    await this.send(email, `Confirmez votre adresse email ${APP_NAME}`, html, text);
   }
 
   // ── Invitation agence (utilisateur existant) ──────────────────────────────
@@ -97,17 +100,15 @@ class DiwaneEmailService {
   ): Promise<void> {
     const urlRejoindre = `${APP_URL}/agence/rejoindre?token=${token}`;
     const html = baseTemplate(`
-      <h2>Bonjour ${prenomInvite} 👋</h2>
-      <p><strong>${proprietaireNom}</strong> vous invite à rejoindre l'agence <strong>${nomAgence}</strong> sur ${APP_NAME}.</p>
-      <p>En acceptant, votre compte passera automatiquement au <strong>plan Pro</strong>.</p>
-      <div style="text-align:center"><a href="${urlRejoindre}" class="btn">Rejoindre l'agence</a></div>
+      <h2>Bonjour ${prenomInvite},</h2>
+      <p><strong>${proprietaireNom}</strong> vous invite à rejoindre l'agence <strong>${nomAgence}</strong> sur ${APP_NAME}, la plateforme immobilière au Sénégal.</p>
+      <p>En acceptant cette invitation, votre compte passera au <strong>plan Pro</strong> et vous bénéficierez de toutes ses fonctionnalités.</p>
+      <div style="text-align:center"><a href="${urlRejoindre}" class="btn">Accepter l'invitation</a></div>
       <hr class="divider">
-      <p style="font-size:13px;color:#888">
-        Vous pouvez aussi accepter directement depuis votre profil dans l'application Diwane.<br>
-        Invitation valable 7 jours.
-      </p>
+      <p style="font-size:13px;color:#888">Vous pouvez également accepter depuis votre profil dans l'application ${APP_NAME}. Cette invitation expire dans 7 jours. Si vous ne souhaitez pas rejoindre cette agence, ignorez cet email.</p>
     `);
-    await this.send(email, `Invitation à rejoindre ${nomAgence} — ${APP_NAME}`, html);
+    const text = `Bonjour ${prenomInvite},\n\n${proprietaireNom} vous invite à rejoindre l'agence ${nomAgence} sur ${APP_NAME}.\n\nAcceptez depuis l'application Diwane (profil > Invitations) ou via ce lien :\n${urlRejoindre}\n\nCette invitation expire dans 7 jours.\n\n— L'équipe ${APP_NAME}`;
+    await this.send(email, `Invitation à rejoindre l'agence ${nomAgence} sur ${APP_NAME}`, html, text);
   }
 
   // ── Invitation agence (nouveau compte) ───────────────────────────────────
@@ -118,25 +119,30 @@ class DiwaneEmailService {
   ): Promise<void> {
     const urlCreer = `${APP_URL}/agence/rejoindre?token=${token}`;
     const html = baseTemplate(`
-      <h2>Bonjour ${prenomInvite} 👋</h2>
-      <p><strong>${proprietaireNom}</strong> vous invite à rejoindre l'agence <strong>${nomAgence}</strong> sur ${APP_NAME}.</p>
-      <p>Cliquez ci-dessous pour créer votre compte et rejoindre l'agence avec le <strong>plan Pro</strong> :</p>
-      <div style="text-align:center"><a href="${urlCreer}" class="btn">Créer mon compte et rejoindre</a></div>
+      <h2>Bonjour ${prenomInvite},</h2>
+      <p><strong>${proprietaireNom}</strong> vous invite à rejoindre l'agence <strong>${nomAgence}</strong> sur ${APP_NAME}, la plateforme immobilière au Sénégal.</p>
+      <p>Cliquez sur le bouton ci-dessous pour créer votre compte gratuitement et rejoindre l'agence avec le <strong>plan Pro</strong> :</p>
+      <div style="text-align:center"><a href="${urlCreer}" class="btn">Créer mon compte</a></div>
       <hr class="divider">
-      <p style="font-size:13px;color:#888">Invitation valable 7 jours.</p>
+      <p style="font-size:13px;color:#888">Cette invitation expire dans 7 jours. Si vous ne souhaitez pas créer de compte, ignorez cet email.</p>
     `);
-    await this.send(email, `Invitation à rejoindre ${nomAgence} — ${APP_NAME}`, html);
+    const text = `Bonjour ${prenomInvite},\n\n${proprietaireNom} vous invite à rejoindre l'agence ${nomAgence} sur ${APP_NAME}.\n\nCréez votre compte via ce lien :\n${urlCreer}\n\nCette invitation expire dans 7 jours.\n\n— L'équipe ${APP_NAME}`;
+    await this.send(email, `Invitation à rejoindre l'agence ${nomAgence} sur ${APP_NAME}`, html, text);
   }
 
   // ── Confirmation rejoindre ────────────────────────────────────────────────
 
   async envoyerConfirmationRejoindre(email: string, prenom: string, nomAgence: string): Promise<void> {
     const html = baseTemplate(`
-      <h2>Bienvenue dans l'agence ${nomAgence} ! 🎉</h2>
-      <p>Bonjour ${prenom}, vous faites maintenant partie de l'agence <strong>${nomAgence}</strong>.</p>
-      <p>Votre compte est passé au <strong>plan Pro</strong>. Connectez-vous à l'application Diwane pour commencer.</p>
+      <h2>Bienvenue dans l'agence ${nomAgence}</h2>
+      <p>Bonjour ${prenom},</p>
+      <p>Vous faites maintenant partie de l'agence <strong>${nomAgence}</strong> sur ${APP_NAME}. Votre compte a été mis à jour avec le <strong>plan Pro</strong>.</p>
+      <p>Connectez-vous à l'application pour commencer à publier des annonces sous le nom de l'agence.</p>
+      <hr class="divider">
+      <p style="font-size:13px;color:#888">Si vous n'êtes pas à l'origine de cette action, contactez le support.</p>
     `);
-    await this.send(email, `Vous avez rejoint ${nomAgence} — ${APP_NAME}`, html);
+    const text = `Bonjour ${prenom},\n\nVous avez rejoint l'agence ${nomAgence} sur ${APP_NAME}. Votre compte est maintenant en plan Pro.\n\nConnectez-vous à l'application Diwane pour commencer.\n\n— L'équipe ${APP_NAME}`;
+    await this.send(email, `Vous avez rejoint l'agence ${nomAgence} sur ${APP_NAME}`, html, text);
   }
 }
 
