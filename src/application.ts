@@ -19,6 +19,17 @@ import {JWTAuthenticationComponent} from '@loopback/authentication-jwt';
 import {EmailService} from './services/mailer';
 import {FirebaseStorageService} from './services/firebase-storage.service';
 import {WaveService} from './services/wave.service';
+import {loginRateLimit, registerRateLimit, refreshRateLimit} from './middleware/rate-limit.middleware';
+
+const isProd = process.env.NODE_ENV === 'production';
+
+// Origines autorisées (Railway + local dev)
+const ALLOWED_ORIGINS = [
+  'https://immo-api-production-dba2.up.railway.app',
+  'http://localhost:3000',
+  'http://localhost:8080',
+  // L'app Flutter envoie des requêtes sans Origin header → géré ci-dessous
+];
 
 export class ImmoApiApplication extends BootMixin(
   ServiceMixin(RepositoryMixin(RestApplication)),
@@ -28,9 +39,18 @@ export class ImmoApiApplication extends BootMixin(
       ...options,
       rest: {
         ...options.rest,
-        // 🔹 Activation CORS
         cors: {
-          origin: true,  // Allow any origin in development (reflects request origin)
+          // En prod : origines strictes ; en dev : tout accepter
+          origin: isProd
+            ? (origin: string | undefined, callback: Function) => {
+                // Flutter mobile n'envoie pas d'Origin header → autoriser
+                if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+                  callback(null, true);
+                } else {
+                  callback(new Error(`CORS: origine non autorisée: ${origin}`));
+                }
+              }
+            : true,
           methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
           allowedHeaders: 'Content-Type, Authorization',
           credentials: true,
@@ -38,48 +58,52 @@ export class ImmoApiApplication extends BootMixin(
       },
     });
 
-    dotenv.config(); // Load .env variables
-
-    // Set up the custom sequence
+    dotenv.config();
     this.sequence(MySequence);
 
-    // Bind services with singleton scope to prevent multiple instances
+    // Services
     this.bind('services.EmailService').toClass(EmailService).inScope(BindingScope.SINGLETON);
     this.bind('services.WaveService').toClass(WaveService).inScope(BindingScope.SINGLETON);
     this.bind('services.FirebaseStorageService').toClass(FirebaseStorageService).inScope(BindingScope.SINGLETON);
 
-    // Mount authentication component first
+    // Auth
     this.component(AuthenticationComponent);
     this.component(JWTAuthenticationComponent);
-
-    // Then override the default token service with our custom one
     this.bind(TokenServiceBindings.TOKEN_SERVICE).toClass(JwtService).inScope(BindingScope.SINGLETON);
 
-    // Set up default home page
+    // Static files
     this.static('/', path.join(__dirname, '../public'));
-
-    // Serve admin dashboard
     this.static('/admin', path.join(__dirname, '../public/admin'));
-
-    // Serve uploaded files
     this.static('/uploads', path.join(__dirname, '../uploads'));
 
-    // Configure REST explorer
-    this.configure(RestExplorerBindings.COMPONENT).to({
-      path: '/explorer',
-      useSelfHostedSpec: true,
-    });
-    this.component(RestExplorerComponent);
+    // Explorer — désactivé en production
+    if (!isProd) {
+      this.configure(RestExplorerBindings.COMPONENT).to({path: '/explorer', useSelfHostedSpec: true});
+      this.component(RestExplorerComponent);
+    }
 
     this.projectRoot = __dirname;
-
-    // Boot options
     this.bootOptions = {
-      controllers: {
-        dirs: ['controllers'],
-        extensions: ['.controller.js'],
-        nested: true,
-      },
+      controllers: {dirs: ['controllers'], extensions: ['.controller.js'], nested: true},
     };
   }
+
+}
+
+// Middlewares montés via index.ts au démarrage
+export function applySecurityMiddlewares(expressApp: any): void {
+  // Security headers
+  expressApp.use((_req: any, res: any, next: any) => {
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (isProd) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
+
+  // Rate limiting
+  expressApp.use('/api/users/login',                loginRateLimit);
+  expressApp.use('/api/users/refresh',              refreshRateLimit);
+  expressApp.use('/api/auth/renvoyer-verification', loginRateLimit);
 }

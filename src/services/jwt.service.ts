@@ -1,10 +1,12 @@
 import {HttpErrors} from '@loopback/rest';
 import {securityId, UserProfile} from '@loopback/security';
+import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import {SignOptions} from 'jsonwebtoken';
 
-const jwtSecret: string = process.env.JWT_SECRET || 'your-secret-key-here-change-in-production';
-const jwtExpiry: string = process.env.JWT_EXPIRY || '24h'; // Token expiry time
+const jwtSecret: string  = process.env.JWT_SECRET || 'change-this-in-production-min-32-chars!!';
+const accessExpiry: string = process.env.JWT_ACCESS_EXPIRY  || '15m';
+const refreshDays          = parseInt(process.env.JWT_REFRESH_DAYS ?? '30', 10);
 
 export interface TokenService {
   generateToken(userProfile: UserProfile): Promise<string>;
@@ -12,50 +14,67 @@ export interface TokenService {
 }
 
 export class JwtService implements TokenService {
-  async generateToken(userProfile: UserProfile): Promise<string> {
-    if (!userProfile) {
-      throw new HttpErrors.Unauthorized('Error generating token: userProfile is null');
-    }
 
-    // Create a plain object for JWT (Symbol properties don't serialize well)
+  // ── Interface TokenService (utilisé par @authenticate('jwt')) ─────────────
+
+  async generateToken(userProfile: UserProfile): Promise<string> {
+    if (!userProfile) throw new HttpErrors.Unauthorized('Error generating token: userProfile is null');
+
     const payload = {
-      id: userProfile[securityId],
-      name: userProfile.name,
-      email: userProfile.email,
-      phoneNumber: userProfile.phoneNumber,
-      roles: userProfile.roles || [],
+      id:          userProfile[securityId],
+      name:        userProfile.name,
+      email:       userProfile.email,
+      telephone:   (userProfile as any).telephone,
+      roles:       userProfile.roles ?? [],
     };
 
-    console.log('📝 JWT Payload to sign:', JSON.stringify(payload, null, 2));
-
-    const options: SignOptions = {expiresIn: jwtExpiry as any};
-    const token = jwt.sign(payload, jwtSecret, options);
-
-    // Verify what we just created
-    const decoded = jwt.decode(token);
-    console.log('✅ Decoded token after signing:', JSON.stringify(decoded, null, 2));
-
-    return token;
+    const options: SignOptions = {expiresIn: accessExpiry as any};
+    return jwt.sign(payload, jwtSecret, options);
   }
 
   async verifyToken(token: string): Promise<UserProfile> {
     try {
       const decoded = jwt.verify(token, jwtSecret) as any;
-      console.log('🔍 JWT Decoded Payload:', JSON.stringify(decoded, null, 2));
-
-      const userProfile = {
+      return {
         [securityId]: decoded.id,
-        name: decoded.name,
-        email: decoded.email,
-        phoneNumber: decoded.phoneNumber,
-        roles: decoded.roles || [],
+        name:         decoded.name,
+        email:        decoded.email,
+        telephone:    decoded.telephone,
+        roles:        decoded.roles ?? [],
       };
+    } catch {
+      throw new HttpErrors.Unauthorized('Token invalide ou expiré');
+    }
+  }
 
-      console.log('🔍 Constructed UserProfile from JWT:', JSON.stringify(userProfile, null, 2));
+  // ── Refresh token helpers ─────────────────────────────────────────────────
 
-      return userProfile;
-    } catch (err) {
-      throw new HttpErrors.Unauthorized('Invalid token');
+  /** Génère un token opaque aléatoire (64 octets hex) */
+  generateRefreshToken(): string {
+    return crypto.randomBytes(64).toString('hex');
+  }
+
+  /** Hash SHA-256 pour stocker en base (jamais le token brut) */
+  hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  /** Date d'expiration du refresh token */
+  refreshExpiresAt(): Date {
+    return new Date(Date.now() + refreshDays * 86400000);
+  }
+
+  /** Expiry en secondes pour le access token (pour le client Flutter) */
+  accessExpiresInSeconds(): number {
+    // Parse "15m", "1h", "24h" etc.
+    const m = accessExpiry.match(/^(\d+)([mhd])$/);
+    if (!m) return 900;
+    const n = parseInt(m[1], 10);
+    switch (m[2]) {
+      case 'm': return n * 60;
+      case 'h': return n * 3600;
+      case 'd': return n * 86400;
+      default:  return 900;
     }
   }
 }

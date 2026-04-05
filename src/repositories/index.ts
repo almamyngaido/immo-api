@@ -7,6 +7,7 @@ export * from './transaction.repository';
 export * from './favori.repository';
 export * from './message.repository';
 export * from './invitation-agence.repository';
+export * from './refresh-token.repository';
 
 // ─── Anciens repositories France B2B (conservés pour compatibilité) ──────────
 // @deprecated — Seront supprimés après migration complète

@@ -25,9 +25,10 @@ import {
 import {diwaneEmail} from '../services/diwane-email.service';
 import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
 import {Bien, getLimitesParPlan, User} from '../models';
-import {BienRepository, UserRepository} from '../repositories';
+import {BienRepository, RefreshTokenRepository, UserRepository} from '../repositories';
 import {comparePassword} from '../services/hash.password';
 import {JwtService} from '../services/jwt.service';
+import {sanitiserEmail, sanitiserTexte, sanitiserTelephone} from '../utils/sanitizer';
 import {diwaneBien} from '../utils/diwane-bien.utils';
 
 const SENEGAL_PHONE_REGEX = /^\+221[37][0-9]{8}$/;
@@ -82,9 +83,27 @@ export class DiwaneUsersController {
     public userRepository: UserRepository,
     @repository(BienRepository)
     public bienRepository: BienRepository,
+    @repository(RefreshTokenRepository)
+    public refreshTokenRepo: RefreshTokenRepository,
     @inject(TokenServiceBindings.TOKEN_SERVICE)
     public jwtService: JwtService,
   ) {}
+
+  /** Crée un refresh token en base et retourne le token brut */
+  private async _creerRefreshToken(userId: string, req?: any): Promise<string> {
+    const raw   = this.jwtService.generateRefreshToken();
+    const hash  = this.jwtService.hashToken(raw);
+    await this.refreshTokenRepo.create({
+      user_id:    userId,
+      token:      hash,
+      expires_at: this.jwtService.refreshExpiresAt(),
+      revoque:    false,
+      user_agent: req?.headers?.['user-agent']?.substring(0, 255),
+      ip_address: req?.ip,
+      createdAt:  new Date(),
+    } as any);
+    return raw;
+  }
 
   // ─── POST /api/users — Inscription B2C ───────────────────────────────────────
 
@@ -123,16 +142,22 @@ export class DiwaneUsersController {
       ville?: string;
       zones_intervention?: string[];
     },
-  ): Promise<{user: object; token: string}> {
+  ): Promise<object> {
+
+    // Sanitisation
+    data.email     = sanitiserEmail(data.email);
+    data.prenom    = sanitiserTexte(data.prenom, 100);
+    data.nom       = sanitiserTexte(data.nom, 100);
+    data.nom_agence = data.nom_agence ? sanitiserTexte(data.nom_agence, 200) : undefined;
 
     // Validation téléphone Sénégal
-    data.telephone = validatePhone(data.telephone);
+    data.telephone = validatePhone(sanitiserTelephone(data.telephone));
 
     // Unicité email + téléphone
     const existing = await this.userRepository.findOne({
       where: {
         or: [
-          {email: data.email.toLowerCase().trim()},
+          {email: data.email},
           {telephone: data.telephone},
         ],
       },
@@ -146,9 +171,9 @@ export class DiwaneUsersController {
 
     // Création — email_verifie=false jusqu'à confirmation
     const newUser = await this.userRepository.create({
-      prenom:           data.prenom.trim(),
-      nom:              data.nom.trim(),
-      email:            data.email.toLowerCase().trim(),
+      prenom:           data.prenom,
+      nom:              data.nom,
+      email:            data.email,
       mot_de_passe:     data.mot_de_passe,
       telephone:        data.telephone,
       role:             data.role,
@@ -190,14 +215,21 @@ export class DiwaneUsersController {
       telephone: newUser.telephone,
       roles:    [newUser.role],
     };
-    const token = await this.jwtService.generateToken(profile);
+    const accessToken   = await this.jwtService.generateToken(profile);
+    const refreshToken  = await this._creerRefreshToken(newUser.id!);
 
-    // Envoi email de vérification (best-effort — ne bloque pas l'inscription)
+    // Envoi email de vérification (best-effort)
     diwaneEmail.envoyerVerification(newUser.email, newUser.prenom, tokenVerif).catch(e => {
       console.error('[Auth] Erreur envoi email vérification:', e);
     });
 
-    return {user: safeUser(newUser), token};
+    return {
+      user:          safeUser(newUser),
+      token:         accessToken,   // rétrocompatibilité Flutter
+      accessToken,
+      refreshToken,
+      expiresIn:     this.jwtService.accessExpiresInSeconds(),
+    };
   }
 
   // ─── GET /api/auth/verifier-email?token=xxx ───────────────────────────────
@@ -296,7 +328,7 @@ h2{color:#e53e3e}.badge{font-size:56px;margin-bottom:16px}</style></head>
       content: {'application/json': {schema: LoginSchema}},
     })
     credentials: {email: string; mot_de_passe: string},
-  ): Promise<{user: object; token: string}> {
+  ): Promise<object> {
 
     const user = await this.userRepository.findOne({
       where: {email: credentials.email.toLowerCase().trim()},
@@ -329,9 +361,16 @@ h2{color:#e53e3e}.badge{font-size:56px;margin-bottom:16px}</style></head>
       telephone: user.telephone,
       roles:    [user.role],
     };
-    const token = await this.jwtService.generateToken(profile);
+    const accessToken  = await this.jwtService.generateToken(profile);
+    const refreshToken = await this._creerRefreshToken(user.id!);
 
-    return {user: safeUser(user), token};
+    return {
+      user:       safeUser(user),
+      token:      accessToken,  // rétrocompatibilité
+      accessToken,
+      refreshToken,
+      expiresIn:  this.jwtService.accessExpiresInSeconds(),
+    };
   }
 
   // ─── GET /api/users/me — Profil courant ───────────────────────────────────
@@ -380,6 +419,74 @@ h2{color:#e53e3e}.badge{font-size:56px;margin-bottom:16px}</style></head>
       ...safeUser(user),
       annonces_actives: annoncesActives,
     };
+  }
+
+  // ─── POST /api/users/refresh ─────────────────────────────────────────────────
+
+  @post('/api/users/refresh', {
+    summary: '[Diwane] Renouveler l\'access token via le refresh token',
+    responses: {'200': {description: 'Nouveaux tokens'}},
+  })
+  async refreshToken(
+    @requestBody({
+      required: true,
+      content: {'application/json': {schema: {type: 'object', required: ['refresh_token'], properties: {refresh_token: {type: 'string'}}}}},
+    })
+    body: {refresh_token: string},
+  ): Promise<object> {
+    if (!body.refresh_token) throw new HttpErrors.BadRequest('refresh_token requis');
+
+    const hash = this.jwtService.hashToken(body.refresh_token);
+    const stored = await this.refreshTokenRepo.findOne({
+      where: {token: hash, revoque: false} as any,
+    });
+
+    if (!stored) throw new HttpErrors.Unauthorized('Refresh token invalide.');
+    if (new Date() > new Date(stored.expires_at)) {
+      await this.refreshTokenRepo.updateById(stored.id!, {revoque: true} as any);
+      throw new HttpErrors.Unauthorized('Refresh token expiré. Reconnectez-vous.');
+    }
+
+    // Rotation : révoquer l'ancien
+    await this.refreshTokenRepo.updateById(stored.id!, {revoque: true} as any);
+
+    const user = await this.userRepository.findById(stored.user_id);
+    if (!user.actif) throw new HttpErrors.Unauthorized('Compte désactivé.');
+
+    const profile: UserProfile = {
+      [securityId]: user.id!,
+      name:     `${user.prenom} ${user.nom}`.trim(),
+      email:    user.email,
+      telephone: user.telephone,
+      roles:    [user.role],
+    };
+    const accessToken  = await this.jwtService.generateToken(profile);
+    const refreshToken = await this._creerRefreshToken(user.id!);
+
+    return {
+      token: accessToken,
+      accessToken,
+      refreshToken,
+      expiresIn: this.jwtService.accessExpiresInSeconds(),
+    };
+  }
+
+  // ─── POST /api/users/logout ───────────────────────────────────────────────────
+
+  @authenticate('jwt')
+  @post('/api/users/logout', {
+    summary: '[Diwane] Déconnexion — révoque les refresh tokens',
+    responses: {'200': {description: 'Déconnecté'}},
+  })
+  async logout(
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<{success: boolean}> {
+    const userId = currentUser[securityId];
+    await this.refreshTokenRepo.updateAll(
+      {revoque: true} as any,
+      {user_id: userId, revoque: false} as any,
+    );
+    return {success: true};
   }
 
   // ─── GET /api/courtiers/{id}/biens — Biens d'un courtier ─────────────────────

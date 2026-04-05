@@ -1,4 +1,4 @@
-import {ApplicationConfig, ImmoApiApplication} from './application';
+import {ApplicationConfig, applySecurityMiddlewares, ImmoApiApplication} from './application';
 import {demarrerJobsExpiration} from './jobs/expiration.job';
 
 export * from './application';
@@ -7,6 +7,9 @@ export async function main(options: ApplicationConfig = {}) {
   const app = new ImmoApiApplication(options);
   await app.boot();
   await app.start();
+
+  // Security middlewares (headers + rate limiting)
+  applySecurityMiddlewares((app.restServer as any).expressApp);
 
   const url = app.restServer.url;
   console.log(`Server is running at ${url}`);
