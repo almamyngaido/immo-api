@@ -6,6 +6,7 @@ export * from './avis.repository';
 export * from './transaction.repository';
 export * from './favori.repository';
 export * from './message.repository';
+export * from './invitation-agence.repository';
 
 // ─── Anciens repositories France B2B (conservés pour compatibilité) ──────────
 // @deprecated — Seront supprimés après migration complète

@@ -6,6 +6,7 @@ export * from './avis.model';
 export * from './transaction.model';
 export * from './favori.model';
 export * from './message.model';
+export * from './invitation-agence.model';
 
 // ─── Anciens modèles France B2B (conservés pour compatibilité) ───────────────
 // @deprecated — Seront supprimés après migration complète des données

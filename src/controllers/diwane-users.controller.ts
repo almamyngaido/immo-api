@@ -11,14 +11,18 @@ import {authenticate} from '@loopback/authentication';
 import {TokenServiceBindings} from '@loopback/authentication-jwt';
 import {inject} from '@loopback/core';
 import {repository} from '@loopback/repository';
+import * as crypto from 'crypto';
 import {
   get,
   HttpErrors,
   param,
   post,
   requestBody,
+  Response,
+  RestBindings,
   SchemaObject,
 } from '@loopback/rest';
+import {diwaneEmail} from '../services/diwane-email.service';
 import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
 import {Bien, getLimitesParPlan, User} from '../models';
 import {BienRepository, UserRepository} from '../repositories';
@@ -137,7 +141,10 @@ export class DiwaneUsersController {
       throw new HttpErrors.Conflict('Email ou téléphone déjà utilisé.');
     }
 
-    // Création — email_verifie=true pour le flow B2C direct
+    // Génération du token de vérification email
+    const tokenVerif = crypto.randomBytes(32).toString('hex');
+
+    // Création — email_verifie=false jusqu'à confirmation
     const newUser = await this.userRepository.create({
       prenom:           data.prenom.trim(),
       nom:              data.nom.trim(),
@@ -148,7 +155,8 @@ export class DiwaneUsersController {
       ville:            data.ville ?? 'Dakar',
       nom_agence:       data.nom_agence,
       zone_intervention: data.zones_intervention,
-      email_verifie:    true,
+      email_verifie:    false,
+      token_email:      tokenVerif,
       actif:            true,
       derniere_connexion: new Date(),
       abonnement: {plan: 'gratuit', actif: false, prix_fcfa: 0} as any,
@@ -184,7 +192,81 @@ export class DiwaneUsersController {
     };
     const token = await this.jwtService.generateToken(profile);
 
+    // Envoi email de vérification (best-effort — ne bloque pas l'inscription)
+    diwaneEmail.envoyerVerification(newUser.email, newUser.prenom, tokenVerif).catch(e => {
+      console.error('[Auth] Erreur envoi email vérification:', e);
+    });
+
     return {user: safeUser(newUser), token};
+  }
+
+  // ─── GET /api/auth/verifier-email?token=xxx ───────────────────────────────
+
+  @get('/api/auth/verifier-email', {
+    summary: '[Diwane] Vérifier l\'email via token (lien email)',
+    responses: {'200': {description: 'HTML confirmation'}},
+  })
+  async verifierEmail(
+    @param.query.string('token') token: string,
+    @inject(RestBindings.Http.RESPONSE) res: Response,
+  ): Promise<Response> {
+    const user = token
+      ? await this.userRepository.findOne({where: {token_email: token} as any}).catch(() => null)
+      : null;
+
+    let html: string;
+    if (user) {
+      await this.userRepository.updateById(user.id!, {
+        email_verifie: true,
+        token_email: undefined,
+        updatedAt: new Date(),
+      } as any);
+      html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Email vérifié</title>
+<style>body{font-family:Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;margin:0}
+.box{background:#fff;border-radius:12px;padding:40px;max-width:440px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+h2{color:#1B2A4A}.badge{font-size:56px;margin-bottom:16px}</style></head>
+<body><div class="box"><div class="badge">✅</div><h2>Email vérifié !</h2>
+<p>Bonjour <strong>${user.prenom}</strong>, votre adresse email a été vérifiée avec succès.</p>
+<p>Vous pouvez maintenant vous connecter sur l'application Diwane.</p></div></body></html>`;
+    } else {
+      html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Lien invalide</title>
+<style>body{font-family:Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;margin:0}
+.box{background:#fff;border-radius:12px;padding:40px;max-width:440px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+h2{color:#e53e3e}.badge{font-size:56px;margin-bottom:16px}</style></head>
+<body><div class="box"><div class="badge">❌</div><h2>Lien invalide</h2>
+<p>Ce lien de vérification est invalide ou a déjà été utilisé.</p></div></body></html>`;
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+    return res;
+  }
+
+  // ─── POST /api/auth/renvoyer-verification ─────────────────────────────────
+
+  @authenticate('jwt')
+  @post('/api/auth/renvoyer-verification', {
+    summary: '[Diwane] Renvoyer l\'email de vérification',
+    responses: {'200': {description: 'Email envoyé'}},
+  })
+  async renvoyerVerification(
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<{message: string}> {
+    const userId = currentUser[securityId];
+    const user = await this.userRepository.findById(userId);
+
+    if (user.email_verifie) {
+      throw new HttpErrors.Conflict('Votre email est déjà vérifié.');
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    await this.userRepository.updateById(userId, {
+      token_email: token,
+      updatedAt: new Date(),
+    } as any);
+
+    await diwaneEmail.envoyerVerification(user.email, user.prenom, token);
+    return {message: 'Email de vérification envoyé.'};
   }
 
   // ─── POST /api/users/login — Connexion simplifiée ─────────────────────────
