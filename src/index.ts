@@ -9,7 +9,7 @@ export async function main(options: ApplicationConfig = {}) {
   await app.start();
 
   // Security middlewares (headers + rate limiting)
-  applySecurityMiddlewares((app.restServer as any).expressApp);
+  applySecurityMiddlewares(app);
 
   const url = app.restServer.url;
   console.log(`Server is running at ${url}`);

@@ -82,6 +82,10 @@ export class ImmoApiApplication extends BootMixin(
       this.component(RestExplorerComponent);
     }
 
+    // Security headers — registered via LoopBack sequence in MySequence
+    // Rate limiting — applied inside the controller via middleware
+    // (see middleware/rate-limit.middleware.ts)
+
     this.projectRoot = __dirname;
     this.bootOptions = {
       controllers: {dirs: ['controllers'], extensions: ['.controller.js'], nested: true},
@@ -90,8 +94,15 @@ export class ImmoApiApplication extends BootMixin(
 
 }
 
-// Middlewares montés via index.ts au démarrage
-export function applySecurityMiddlewares(expressApp: any): void {
+// Called from index.ts after app.start()
+// Uses LoopBack internal _expressApp (RestServer stores it there)
+export function applySecurityMiddlewares(app: ImmoApiApplication): void {
+  const expressApp = (app.restServer as any)._expressApp;
+  if (!expressApp) {
+    console.warn('[Security] expressApp not found — skipping security middlewares');
+    return;
+  }
+
   // Security headers
   expressApp.use((_req: any, res: any, next: any) => {
     res.setHeader('X-Frame-Options', 'DENY');
