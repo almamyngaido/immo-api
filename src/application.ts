@@ -23,13 +23,13 @@ import {loginRateLimit, registerRateLimit, refreshRateLimit} from './middleware/
 
 const isProd = process.env.NODE_ENV === 'production';
 
-// Origines autorisées (Railway + local dev)
+// Origines autorisées en production
 const ALLOWED_ORIGINS = [
   'https://immo-api-production-dba2.up.railway.app',
-  'http://localhost:3000',
-  'http://localhost:8080',
-  // L'app Flutter envoie des requêtes sans Origin header → géré ci-dessous
 ];
+
+// En dev, autoriser tous les localhost (Flutter web, Chrome, etc.)
+const LOCALHOST_REGEX = /^https?:\/\/localhost(:\d+)?$/;
 
 export class ImmoApiApplication extends BootMixin(
   ServiceMixin(RepositoryMixin(RestApplication)),
@@ -41,16 +41,17 @@ export class ImmoApiApplication extends BootMixin(
         ...options.rest,
         cors: {
           // En prod : origines strictes ; en dev : tout accepter
-          origin: isProd
-            ? (origin: string | undefined, callback: Function) => {
-                // Flutter mobile n'envoie pas d'Origin header → autoriser
-                if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-                  callback(null, true);
-                } else {
-                  callback(new Error(`CORS: origine non autorisée: ${origin}`));
-                }
+          origin: (origin: string | undefined, callback: Function) => {
+              // Flutter mobile n'envoie pas d'Origin header → autoriser
+              if (!origin) return callback(null, true);
+              // Localhost toujours autorisé (Flutter web dev, tests)
+              if (LOCALHOST_REGEX.test(origin)) return callback(null, true);
+              // En prod : seulement les origines connues
+              if (isProd && !ALLOWED_ORIGINS.includes(origin)) {
+                return callback(new Error(`CORS: origine non autorisée: ${origin}`));
               }
-            : true,
+              callback(null, true);
+            },
           methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
           allowedHeaders: 'Content-Type, Authorization',
           credentials: true,
