@@ -273,6 +273,10 @@ export class User extends Entity {
   @property({type: 'string'})
   nom_agence?: string; // Plan Pro uniquement
 
+  // Agence multi-utilisateurs (plan Pro — max 7 agents)
+  @property({type: 'string'})
+  agence_id?: string; // ID du courtier Pro propriétaire de l'agence (null = solo)
+
   @property.array(String)
   zone_intervention?: string[]; // ['Dakar', 'Thiès', 'Mbour']
 
