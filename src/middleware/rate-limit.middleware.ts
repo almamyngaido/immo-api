@@ -7,7 +7,6 @@ export const loginRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {error: {message: 'Trop de tentatives. Réessayez dans 15 minutes.', statusCode: 429}},
-  keyGenerator: (req: any) => req.ip ?? 'unknown',
   skip: () => process.env.NODE_ENV !== 'production', // désactivé en dev
 });
 
@@ -18,7 +17,6 @@ export const registerRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {error: {message: 'Trop de tentatives d\'inscription. Réessayez plus tard.', statusCode: 429}},
-  keyGenerator: (req: any) => req.ip ?? 'unknown',
   skip: () => process.env.NODE_ENV !== 'production',
 });
 

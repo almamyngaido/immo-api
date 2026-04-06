@@ -20,7 +20,8 @@ import {
 } from '@loopback/rest';
 import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
 import {Bien} from '../models';
-import {BienRepository, DemandeContactRepository, UserRepository} from '../repositories';
+import {AlerteRechercheRepository, BienRepository, DemandeContactRepository, UserRepository} from '../repositories';
+import {AlerteService} from '../services/alerte.service';
 import {buildOrder, diwaneBien} from '../utils/diwane-bien.utils';
 
 export class DiwaneBiensController {
@@ -31,6 +32,10 @@ export class DiwaneBiensController {
     public userRepository: UserRepository,
     @repository(DemandeContactRepository)
     public demandeContactRepository: DemandeContactRepository,
+    @repository(AlerteRechercheRepository)
+    public alerteRepository: AlerteRechercheRepository,
+    @inject('services.AlerteService')
+    public alerteService: AlerteService,
   ) {}
 
   // ─── GET /api/biens — Recherche avec filtres ─────────────────────────────────
@@ -69,6 +74,11 @@ export class DiwaneBiensController {
       {or: [
         {date_expiration: {gt: new Date()}},
         {date_expiration: null as any},
+      ]},
+      // Exclure les biens loués ou vendus (disponibilite null = disponible par défaut)
+      {or: [
+        {disponibilite: {inq: ['disponible', 'visite_en_cours']}},
+        {disponibilite: null as any},
       ]},
     ];
 
@@ -186,6 +196,50 @@ export class DiwaneBiensController {
     return biens.map(b => diwaneBien(b, courtierMap.get(b.courtier_id)));
   }
 
+  // ─── PATCH /api/biens/:id/disponibilite — Mise à jour disponibilité ─────────
+
+  @authenticate('jwt')
+  @patch('/api/biens/{id}/disponibilite', {
+    summary: '[Diwane] Mettre à jour la disponibilité d\'un bien (courtier)',
+    responses: {
+      '200': {description: 'Succès', content: {'application/json': {schema: {type: 'object'}}}},
+    },
+  })
+  async mettreAJourDisponibilite(
+    @param.path.string('id') id: string,
+    @requestBody() body: {disponibilite: string},
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<{success: boolean}> {
+    const userId = currentUser[securityId];
+    const bien = await this.bienRepository.findById(id);
+
+    if (bien.courtier_id !== userId) {
+      throw new HttpErrors.Forbidden('Ce bien ne vous appartient pas.');
+    }
+
+    const valeurs = ['disponible', 'visite_en_cours', 'loue', 'vendu'];
+    if (!valeurs.includes(body.disponibilite)) {
+      throw new HttpErrors.UnprocessableEntity('Valeur de disponibilité invalide.');
+    }
+
+    const updates: any = {
+      disponibilite: body.disponibilite,
+      date_maj_disponibilite: new Date(),
+    };
+
+    // Si loué ou vendu → archiver le bien
+    if (body.disponibilite === 'loue' || body.disponibilite === 'vendu') {
+      updates.statut = body.disponibilite;
+    }
+    // Si remis disponible après archivage → repasser en publie
+    if (body.disponibilite === 'disponible' && bien.statut !== 'publie') {
+      updates.statut = 'publie';
+    }
+
+    await this.bienRepository.updateById(id, updates);
+    return {success: true};
+  }
+
   // ─── GET /api/biens/mes-annonces — Mes annonces (courtier) ───────────────────
   // ⚠️ Doit être défini AVANT /api/biens/{id} pour éviter la capture
 
@@ -213,6 +267,58 @@ export class DiwaneBiensController {
 
     const courtier = await this.userRepository.findById(currentUser[securityId]).catch(() => undefined);
     return biens.map(b => diwaneBien(b, courtier));
+  }
+
+  // ─── GET /api/biens/agence — Toutes les annonces de l'agence ────────────────
+  // ⚠️ Doit être défini AVANT /api/biens/{id} pour éviter la capture
+
+  @authenticate('jwt')
+  @get('/api/biens/agence', {
+    summary: '[Diwane] Annonces de l\'agence (Pro — propriétaire ou membre)',
+    responses: {
+      '200': {
+        description: 'Annonces de l\'agence',
+        content: {'application/json': {schema: {type: 'array'}}},
+      },
+    },
+  })
+  async annoncesAgence(
+    @inject(SecurityBindings.USER) currentUser: UserProfile,
+  ): Promise<object[]> {
+    const userId = currentUser[securityId];
+    const user = await this.userRepository.findById(userId).catch(() => undefined);
+    if (!user) throw new HttpErrors.Unauthorized('Utilisateur introuvable.');
+
+    const planAbonnement = (user as any).abonnement?.plan ?? 'gratuit';
+    if (planAbonnement !== 'pro') {
+      throw new HttpErrors.Forbidden('Cette fonctionnalité est réservée au plan Pro.');
+    }
+
+    // Déterminer l'ID du propriétaire de l'agence
+    const agenceOwnerId: string = (user as any).agence_id ?? userId;
+
+    // Récupérer tous les membres de l'agence (propriétaire + agents)
+    const membres = await this.userRepository.find({
+      where: {
+        or: [
+          {id: agenceOwnerId},
+          {agence_id: agenceOwnerId},
+        ],
+      } as any,
+      fields: {id: true, prenom: true, nom: true, nom_agence: true, badges: true, abonnement: true},
+    });
+
+    const membreIds = membres.map((m: any) => m.id as string);
+    if (membreIds.length === 0) return [];
+
+    const biens = await this.bienRepository.find({
+      where: {courtier_id: {inq: membreIds}} as any,
+      order: ['createdAt DESC'],
+    });
+
+    // Associer chaque bien à son courtier
+    const membreMap = new Map(membres.map((m: any) => [m.id as string, m]));
+    return biens.map(b => diwaneBien(b, membreMap.get((b as any).courtier_id)));
   }
 
   // ─── POST /api/biens/migrate-statut — Migration en_attente→publie (admin) ────
@@ -471,6 +577,19 @@ export class DiwaneBiensController {
         });
       });
     }).catch(() => {});
+
+    // Déclencher les alertes acheteur si le bien passe en publié (best-effort)
+    if (body.statut === 'publie') {
+      this.alerteRepository.find({where: {active: true} as any}).then(alertes => {
+        const bienPublie = {...bien, ...update} as Bien;
+        return this.alerteService.notifierAlertes(bienPublie, alertes).then(() => {
+          // Incrémenter le compteur de chaque alerte qui a matché
+          // (l'AlerteService loggue en interne, pas besoin de retour ici)
+        });
+      }).catch(err => {
+        console.error('[Alertes] Erreur lors du déclenchement des alertes:', err);
+      });
+    }
   }
 
   // ─── POST /api/biens — Créer une annonce (courtier JWT) ──────────────────────
