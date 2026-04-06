@@ -13,6 +13,7 @@ export * from './payment.controller';
 export * from './verification.controller';
 export * from './diwane-favoris.controller';
 export * from './agence.controller';
+export * from './alerte-recherche.controller';
 export * from './demande-contact.controller';
 export * from './avis.controller';
 export * from './transaction.controller';

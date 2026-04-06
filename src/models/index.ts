@@ -8,6 +8,7 @@ export * from './favori.model';
 export * from './message.model';
 export * from './invitation-agence.model';
 export * from './refresh-token.model';
+export * from './alerte-recherche.model';
 
 // ─── Anciens modèles France B2B (conservés pour compatibilité) ───────────────
 // @deprecated — Seront supprimés après migration complète des données

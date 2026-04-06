@@ -330,6 +330,16 @@ export class Bien extends Entity {
   @property({type: 'boolean', default: false})
   en_vedette?: boolean; // Badge "En vedette" - top de liste
 
+  @property({
+    type: 'string',
+    default: 'disponible',
+    jsonSchema: {enum: ['disponible', 'visite_en_cours', 'loue', 'vendu']},
+  })
+  disponibilite?: string;
+
+  @property({type: 'date'})
+  date_maj_disponibilite?: Date;
+
   @property({type: 'date'})
   disponible_des?: Date;
 

@@ -1,6 +1,7 @@
 // ─── Nouveaux repositories Sénégal B2C ───────────────────────────────────────
 export * from './user.repository';
 export * from './bien.repository';
+export * from './alerte-recherche.repository';
 export * from './demande-contact.repository';
 export * from './avis.repository';
 export * from './transaction.repository';

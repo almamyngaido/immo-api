@@ -19,6 +19,7 @@ import {JWTAuthenticationComponent} from '@loopback/authentication-jwt';
 import {EmailService} from './services/mailer';
 import {FirebaseStorageService} from './services/firebase-storage.service';
 import {WaveService} from './services/wave.service';
+import {AlerteService} from './services/alerte.service';
 import {loginRateLimit, registerRateLimit, refreshRateLimit} from './middleware/rate-limit.middleware';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -67,6 +68,7 @@ export class ImmoApiApplication extends BootMixin(
     this.bind('services.EmailService').toClass(EmailService).inScope(BindingScope.SINGLETON);
     this.bind('services.WaveService').toClass(WaveService).inScope(BindingScope.SINGLETON);
     this.bind('services.FirebaseStorageService').toClass(FirebaseStorageService).inScope(BindingScope.SINGLETON);
+    this.bind('services.AlerteService').toClass(AlerteService).inScope(BindingScope.SINGLETON);
 
     // Auth
     this.component(AuthenticationComponent);

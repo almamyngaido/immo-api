@@ -48,6 +48,8 @@ export function diwaneBien(bien: Bien, courtier?: Partial<User>): object {
       },
       ville:      courtier.ville,
     } : undefined,
+    disponibilite:          bien.disponibilite ?? 'disponible',
+    date_maj_disponibilite: bien.date_maj_disponibilite,
     date_publication: bien.date_publication,
     createdAt:        bien.createdAt,
   };
