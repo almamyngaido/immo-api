@@ -75,10 +75,12 @@ export class DiwaneBiensController {
         {date_expiration: {gt: new Date()}},
         {date_expiration: null as any},
       ]},
-      // Exclure les biens loués ou vendus (disponibilite null = disponible par défaut)
+      // Exclure les biens loués ou vendus
+      // Inclure : disponible, visite_en_cours, champ absent (anciens docs), null
       {or: [
         {disponibilite: {inq: ['disponible', 'visite_en_cours']}},
         {disponibilite: null as any},
+        {disponibilite: {exists: false} as any},
       ]},
     ];
 
@@ -213,8 +215,8 @@ export class DiwaneBiensController {
     const userId = currentUser[securityId];
     const bien = await this.bienRepository.findById(id);
 
-    if (bien.courtier_id !== userId) {
-      throw new HttpErrors.Forbidden('Ce bien ne vous appartient pas.');
+    if (bien.courtier_id?.toString() !== userId?.toString()) {
+      throw new HttpErrors.Forbidden('Cette annonce ne vous appartient pas.');
     }
 
     const valeurs = ['disponible', 'visite_en_cours', 'loue', 'vendu'];
@@ -532,7 +534,7 @@ export class DiwaneBiensController {
     const isAdmin = roles.some(r => String(r).toLowerCase() === 'admin');
     const userId  = currentUser[securityId];
 
-    if (!isAdmin && bien.courtier_id !== userId) {
+    if (!isAdmin && bien.courtier_id?.toString() !== userId?.toString()) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
 
@@ -804,7 +806,7 @@ export class DiwaneBiensController {
     const roles: string[] = (currentUser.roles as string[]) ?? [];
     const isAdmin = roles.some(r => String(r).toLowerCase() === 'admin');
 
-    if (!isAdmin && bien.courtier_id !== currentUser[securityId]) {
+    if (!isAdmin && bien.courtier_id?.toString() !== currentUser[securityId]?.toString()) {
       throw new HttpErrors.Forbidden('Vous ne pouvez modifier que vos propres annonces.');
     }
 
@@ -877,7 +879,7 @@ export class DiwaneBiensController {
     const roles: string[] = (currentUser.roles as string[]) ?? [];
     const isAdmin = roles.some(r => String(r).toLowerCase() === 'admin');
 
-    if (!isAdmin && bien.courtier_id !== currentUser[securityId]) {
+    if (!isAdmin && bien.courtier_id?.toString() !== currentUser[securityId]?.toString()) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
 
