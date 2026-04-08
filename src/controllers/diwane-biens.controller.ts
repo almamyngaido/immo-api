@@ -526,6 +526,7 @@ export class DiwaneBiensController {
     })
     body: {statut: string; admin_note?: string},
   ): Promise<void> {
+    console.log(`[changerStatut] ← reçu: bien=${id} statut=${body.statut}`);
     const bien = await this.bienRepository.findById(id).catch(() => {
       throw new HttpErrors.NotFound('Annonce introuvable.');
     });
