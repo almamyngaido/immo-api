@@ -582,11 +582,12 @@ export class DiwaneBiensController {
 
     // Déclencher les alertes acheteur si le bien passe en publié (best-effort)
     if (body.statut === 'publie') {
+      console.log(`[Alertes] Bien ${id} passé en publié — recherche des alertes actives…`);
       this.alerteRepository.find({where: {active: true} as any}).then(alertes => {
-        const bienPublie = {...bien, ...update} as Bien;
-        return this.alerteService.notifierAlertes(bienPublie, alertes).then(() => {
-          // Incrémenter le compteur de chaque alerte qui a matché
-          // (l'AlerteService loggue en interne, pas besoin de retour ici)
+        console.log(`[Alertes] ${alertes.length} alerte(s) active(s) trouvée(s) en base`);
+        // Recharger le bien depuis la base pour avoir toutes les données fraîches (localisation, etc.)
+        return this.bienRepository.findById(id).then(bienFrais => {
+          return this.alerteService.notifierAlertes(bienFrais, alertes);
         });
       }).catch(err => {
         console.error('[Alertes] Erreur lors du déclenchement des alertes:', err);

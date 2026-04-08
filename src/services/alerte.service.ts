@@ -12,7 +12,12 @@ import {Bien} from '../models';
 import {AlerteRecherche} from '../models/alerte-recherche.model';
 
 const ONESIGNAL_APP_ID       = process.env.ONESIGNAL_APP_ID       ?? '';
-const ONESIGNAL_REST_API_KEY  = process.env.ONESIGNAL_REST_API_KEY  ?? '';
+// Accepter les deux noms possibles de la variable Railway
+const ONESIGNAL_REST_API_KEY  = process.env.ONESIGNAL_REST_API_KEY  ?? process.env.ONESIGNAL_API_KEY ?? '';
+
+// Diagnostic au démarrage
+console.log('[AlerteService] ONESIGNAL_APP_ID:', ONESIGNAL_APP_ID ? `${ONESIGNAL_APP_ID.slice(0, 8)}...` : 'MANQUANT');
+console.log('[AlerteService] ONESIGNAL_REST_API_KEY:', ONESIGNAL_REST_API_KEY ? `${ONESIGNAL_REST_API_KEY.slice(0, 8)}...` : 'MANQUANT');
 
 @injectable()
 export class AlerteService {
@@ -22,8 +27,24 @@ export class AlerteService {
    * Cherche toutes les alertes actives et notifie les acheteurs qui matchent.
    */
   async notifierAlertes(bien: Bien, alertes: AlerteRecherche[]): Promise<void> {
+    console.log(`[AlerteService] notifierAlertes — bien: "${bien.titre}" (id: ${bien.id})`);
+    console.log(`[AlerteService] Total alertes reçues: ${alertes.length}`);
+
     const actives = alertes.filter(a => a.active);
+    console.log(`[AlerteService] Alertes actives: ${actives.length}`);
+
     const correspondances = actives.filter(a => this._correspond(bien, a));
+    console.log(`[AlerteService] Alertes correspondantes: ${correspondances.length}`);
+
+    if (correspondances.length === 0) {
+      console.log('[AlerteService] Aucune alerte ne correspond — pas de notification envoyée');
+      // Log détail du bien pour debugger le matching
+      console.log('[AlerteService] Bien localisation:', JSON.stringify(bien.localisation));
+      console.log('[AlerteService] Bien type_bien:', bien.type_bien, '| type_transaction:', bien.type_transaction);
+      if (actives.length > 0) {
+        console.log('[AlerteService] Critères de la 1ère alerte active:', JSON.stringify(actives[0].criteres));
+      }
+    }
 
     for (const alerte of correspondances) {
       try {
@@ -93,6 +114,8 @@ export class AlerteService {
       return Promise.resolve();
     }
 
+    console.log(`[AlerteService] Envoi notification → subscription_id: ${alerte.onesignal_subscription_id} | alerte: ${alerte.id}`);
+
     const ville     = (bien.localisation as any)?.ville    ?? '';
     const quartier  = (bien.localisation as any)?.quartier ?? '';
     const localite  = quartier ? `${quartier}, ${ville}` : ville;
@@ -131,7 +154,9 @@ export class AlerteService {
           res.on('data', d => (data += d));
           res.on('end', () => {
             if (res.statusCode && res.statusCode >= 400) {
-              console.error('[AlerteService] OneSignal error', res.statusCode, data);
+              console.error(`[AlerteService] OneSignal HTTP ${res.statusCode}:`, data);
+            } else {
+              console.log(`[AlerteService] OneSignal réponse ${res.statusCode}:`, data);
             }
             resolve();
           });
