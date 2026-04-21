@@ -20,6 +20,7 @@ import {
 } from '@loopback/rest';
 import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
 import {Bien} from '../models';
+import {getLimitesParPlan} from '../models/user.model';
 import {AlerteRechercheRepository, BienRepository, DemandeContactRepository, UserRepository} from '../repositories';
 import {AlerteService} from '../services/alerte.service';
 import {buildOrder, diwaneBien} from '../utils/diwane-bien.utils';
@@ -671,7 +672,11 @@ export class DiwaneBiensController {
       : courtier;
 
     const plan = (planSource.abonnement as any)?.plan ?? 'gratuit';
-    const maxAnnonces = (planSource.limites as any)?.max_annonces ?? 5;
+    // Recalculer les limites depuis le plan actuel — ne pas faire confiance au champ limites en base
+    // qui peut être absent ou désynchronisé après un changement de plan
+    const limitesActuelles = getLimitesParPlan(plan);
+    const maxAnnonces = limitesActuelles.max_annonces;
+    console.log(`[creerBien] courtier=${currentUser[securityId]} plan="${plan}" max_annonces=${maxAnnonces}`);
 
     if (maxAnnonces !== null) {
       // Pour un membre d'agence : compter toutes les annonces de l'agence (propriétaire + membres)
