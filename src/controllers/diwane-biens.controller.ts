@@ -664,20 +664,33 @@ export class DiwaneBiensController {
       throw new HttpErrors.Forbidden('Compte désactivé.');
     }
 
-    // Plan du courtier (source de vérité : abonnement.plan)
-    const plan = (courtier.abonnement as any)?.plan ?? 'gratuit';
+    // Si le courtier est membre d'une agence Pro, utiliser les limites du propriétaire
+    const agenceId = (courtier as any).agence_id;
+    const planSource = agenceId
+      ? await this.userRepository.findById(agenceId).catch(() => null) ?? courtier
+      : courtier;
 
-    // FIX 3 — Quota annonces : null = illimité (premium/pro)
-    const maxAnnonces = (courtier.limites as any)?.max_annonces ?? 5;
+    const plan = (planSource.abonnement as any)?.plan ?? 'gratuit';
+    const maxAnnonces = (planSource.limites as any)?.max_annonces ?? 5;
+
     if (maxAnnonces !== null) {
+      // Pour un membre d'agence : compter toutes les annonces de l'agence (propriétaire + membres)
+      const membres = agenceId
+        ? await this.userRepository.find({
+            where: {or: [{id: agenceId}, {agence_id: agenceId}]} as any,
+            fields: {id: true} as any,
+          })
+        : [courtier];
+      const membreIds = membres.map((m: any) => m.id as string).filter(Boolean);
+
       const nbActives = await this.bienRepository.count({
-        courtier_id: currentUser[securityId],
+        courtier_id: {inq: membreIds} as any,
         statut: {inq: ['publie', 'en_attente']} as any,
       });
       if (nbActives.count >= maxAnnonces) {
         throw new HttpErrors.Forbidden(JSON.stringify({
           code:             'QUOTA_ATTEINT',
-          message:          `Vous avez atteint votre limite de ${maxAnnonces} annonces.`,
+          message:          `L'agence a atteint sa limite de ${maxAnnonces} annonces.`,
           upgrade_required: true,
           plan_actuel:      plan,
           limite:           maxAnnonces,
@@ -685,13 +698,13 @@ export class DiwaneBiensController {
       }
     }
 
-    // FIX 2 — Quota photos : null = illimité (premium/pro)
-    const maxPhotos = (courtier.limites as any)?.max_photos_par_annonce ?? 10;
+    // Quota photos — basé sur le plan de l'agence si membre
+    const maxPhotos = (planSource.limites as any)?.max_photos_par_annonce ?? 10;
     const nbPhotos = (body.photos ?? []).length;
     if (maxPhotos !== null && nbPhotos > maxPhotos) {
       throw new HttpErrors.Forbidden(JSON.stringify({
         code:    'LIMITE_PHOTOS_ATTEINTE',
-        message: `Votre plan ${plan} est limité à ${maxPhotos} photos par annonce.`,
+        message: `Le plan ${plan} est limité à ${maxPhotos} photos par annonce.`,
         limite:  maxPhotos,
         upgrade_required: plan === 'gratuit',
       }));
@@ -742,6 +755,7 @@ export class DiwaneBiensController {
     bienData.reference = await this.bienRepository.generateReference(body.ville, body.type_bien);
 
     const createdBien = await this.bienRepository.create(bienData);
+    console.log(`[creerBien] Bien créé id=${createdBien.id} statut=publie — déclenchement des alertes…`);
 
     this.userRepository.updateById(currentUser[securityId], {
       stats: {
@@ -750,6 +764,14 @@ export class DiwaneBiensController {
         nb_annonces_total:   (courtier.stats?.nb_annonces_total ?? 0) + 1,
       } as any,
     }).catch(() => {});
+
+    // Déclencher les alertes acheteur (best-effort, même flux que changerStatut)
+    this.alerteRepository.find({where: {active: true} as any}).then(alertes => {
+      console.log(`[creerBien][Alertes] ${alertes.length} alerte(s) active(s) trouvée(s) en base`);
+      return this.alerteService.notifierAlertes(createdBien, alertes);
+    }).catch(err => {
+      console.error('[creerBien][Alertes] Erreur lors du déclenchement des alertes:', err);
+    });
 
     return diwaneBien(createdBien, courtier);
   }

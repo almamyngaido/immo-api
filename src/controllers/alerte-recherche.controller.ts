@@ -71,6 +71,8 @@ export class AlerteRechercheController {
     },
   ): Promise<object> {
     const userId = currentUser[securityId];
+    console.log(`[POST /api/alertes] userId=${userId} subscription_id=${body.onesignal_subscription_id} label=${body.label ?? '—'}`);
+    console.log(`[POST /api/alertes] criteres=${JSON.stringify(body.criteres ?? {})}`);
 
     // Éviter les doublons (même subscription_id + même acheteur)
     const existing = await this.alerteRepository.findOne({
@@ -80,7 +82,7 @@ export class AlerteRechercheController {
       } as any,
     });
     if (existing) {
-      // Mise à jour des critères si l'alerte existe déjà
+      console.log(`[POST /api/alertes] alerte existante trouvée id=${existing.id} — mise à jour`);
       await this.alerteRepository.updateById(existing.id, {
         criteres:  body.criteres ?? existing.criteres,
         label:     body.label    ?? existing.label,
@@ -101,6 +103,7 @@ export class AlerteRechercheController {
       updatedAt:                 new Date(),
     });
 
+    console.log(`[POST /api/alertes] alerte créée id=${alerte.id}`);
     return {id: alerte.id, created: true};
   }
 
