@@ -156,7 +156,8 @@ export class AlerteRechercheController {
     const alerte = await this.alerteRepository.findById(id).catch(() => {
       throw new HttpErrors.NotFound('Alerte introuvable.');
     });
-    if (alerte.acheteur_id !== currentUser[securityId]) {
+    console.log(`[PATCH /api/alertes/${id}] alerte.acheteur_id="${alerte.acheteur_id}" securityId="${currentUser[securityId]}"`);
+    if (alerte.acheteur_id?.toString() !== currentUser[securityId]?.toString()) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
     const update: any = {updatedAt: new Date()};
@@ -180,7 +181,8 @@ export class AlerteRechercheController {
     const alerte = await this.alerteRepository.findById(id).catch(() => {
       throw new HttpErrors.NotFound('Alerte introuvable.');
     });
-    if (alerte.acheteur_id !== currentUser[securityId]) {
+    console.log(`[DELETE /api/alertes/${id}] alerte.acheteur_id="${alerte.acheteur_id}" securityId="${currentUser[securityId]}"`);
+    if (alerte.acheteur_id?.toString() !== currentUser[securityId]?.toString()) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
     await this.alerteRepository.deleteById(id);
