@@ -5,7 +5,7 @@ import * as jwt from 'jsonwebtoken';
 import {SignOptions} from 'jsonwebtoken';
 
 const jwtSecret: string  = process.env.JWT_SECRET || 'change-this-in-production-min-32-chars!!';
-const accessExpiry: string = process.env.JWT_ACCESS_EXPIRY  || '15m';
+const accessExpiry: string = process.env.JWT_ACCESS_EXPIRY  || '7d';
 const refreshDays          = parseInt(process.env.JWT_REFRESH_DAYS ?? '30', 10);
 
 export interface TokenService {
