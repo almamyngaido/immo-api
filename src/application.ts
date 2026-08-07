@@ -20,7 +20,6 @@ import {EmailService} from './services/mailer';
 import {FirebaseStorageService} from './services/firebase-storage.service';
 import {WaveService} from './services/wave.service';
 import {AlerteService} from './services/alerte.service';
-import {loginRateLimit, registerRateLimit, refreshRateLimit} from './middleware/rate-limit.middleware';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -86,9 +85,11 @@ export class ImmoApiApplication extends BootMixin(
       this.component(RestExplorerComponent);
     }
 
-    // Security headers — registered via LoopBack sequence in MySequence
-    // Rate limiting — applied inside the controller via middleware
-    // (see middleware/rate-limit.middleware.ts)
+    // Security headers, UTF-8 charset and rate limiting — all applied in
+    // MySequence.handle() (see sequence.ts). They used to be registered here
+    // via _expressApp.use() after app.start(), but that runs too late:
+    // LoopBack's own route dispatcher is already handling and terminating
+    // matched API requests by then, so none of that middleware ever fired.
 
     this.projectRoot = __dirname;
     this.bootOptions = {
@@ -96,29 +97,4 @@ export class ImmoApiApplication extends BootMixin(
     };
   }
 
-}
-
-// Called from index.ts after app.start()
-// Uses LoopBack internal _expressApp (RestServer stores it there)
-export function applySecurityMiddlewares(app: ImmoApiApplication): void {
-  const expressApp = (app.restServer as any)._expressApp;
-  if (!expressApp) {
-    console.warn('[Security] expressApp not found — skipping security middlewares');
-    return;
-  }
-
-  // Security headers
-  expressApp.use((_req: any, res: any, next: any) => {
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    if (isProd) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-    next();
-  });
-
-  // Rate limiting
-  expressApp.use('/api/users/login',                loginRateLimit);
-  expressApp.use('/api/users/refresh',              refreshRateLimit);
-  expressApp.use('/api/auth/renvoyer-verification', loginRateLimit);
 }
