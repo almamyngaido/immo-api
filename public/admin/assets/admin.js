@@ -279,7 +279,6 @@ if (document.getElementById('courtiers-list') && document.getElementById('filter
 
   window.chargerCourtiers = async function() {
     const statut = document.getElementById('filter-statut').value;
-    const plan = document.getElementById('filter-plan').value;
     const list = document.getElementById('courtiers-list');
     list.innerHTML = '<p class="loading">Chargement…</p>';
 
