@@ -23,7 +23,7 @@ import {Bien} from '../models';
 import {getLimitesParPlan} from '../models/user.model';
 import {AlerteRechercheRepository, BienRepository, DemandeContactRepository, UserRepository} from '../repositories';
 import {AlerteService} from '../services/alerte.service';
-import {buildOrder, diwaneBien} from '../utils/diwane-bien.utils';
+import {buildOrder, diwaneBien, escapeRegex} from '../utils/diwane-bien.utils';
 
 export class DiwaneBiensController {
   constructor(
@@ -90,7 +90,7 @@ export class DiwaneBiensController {
       const villeNorm = ville.trim().charAt(0).toUpperCase() + ville.trim().slice(1).toLowerCase();
       andClauses.push({'localisation.ville': villeNorm});
     }
-    if (quartier)        andClauses.push({'localisation.quartier': {like: quartier.trim(), options: 'i'}});
+    if (quartier)        andClauses.push({'localisation.quartier': {like: escapeRegex(quartier.trim()), options: 'i'}});
     if (typeBien)        andClauses.push({type_bien: typeBien});
     if (typeTransaction) andClauses.push({type_transaction: typeTransaction});
 
@@ -110,7 +110,7 @@ export class DiwaneBiensController {
 
     // Recherche texte libre — insensible à la casse
     if (q) {
-      const qTrim = q.trim();
+      const qTrim = escapeRegex(q.trim());
       andClauses.push({
         or: [
           {titre:                   {like: qTrim, options: 'i'}},

@@ -4,6 +4,9 @@ import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import {SignOptions} from 'jsonwebtoken';
 
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET doit être défini en production — impossible de démarrer avec le secret par défaut.');
+}
 const jwtSecret: string  = process.env.JWT_SECRET || 'change-this-in-production-min-32-chars!!';
 const accessExpiry: string = process.env.JWT_ACCESS_EXPIRY  || '7d';
 const refreshDays          = parseInt(process.env.JWT_REFRESH_DAYS ?? '30', 10);

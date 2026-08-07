@@ -4,6 +4,11 @@
  */
 import {Bien, User} from '../models';
 
+/** Échappe les caractères spéciaux regex avant de construire un filtre `like` Mongo depuis un input utilisateur */
+export function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Transforme un Bien + courtier optionnel → format Diwane Flutter */
 export function diwaneBien(bien: Bien, courtier?: Partial<User>): object {
   const photos = (bien.medias ?? [])

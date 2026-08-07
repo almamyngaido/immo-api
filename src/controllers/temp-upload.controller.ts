@@ -1,3 +1,4 @@
+import {authenticate} from '@loopback/authentication';
 import {inject} from '@loopback/core';
 import {
   post,
@@ -10,11 +11,14 @@ import multer from 'multer';
 import {v2 as cloudinary} from 'cloudinary';
 import {Readable} from 'stream';
 
-// Configure Cloudinary
+// Configure Cloudinary — pas de fallback : échoue au démarrage si mal configuré
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  throw new Error('CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET doivent être définis dans .env');
+}
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME ?? 'delfon5lw',
-  api_key:    process.env.CLOUDINARY_API_KEY    ?? '224758895562585',
-  api_secret: process.env.CLOUDINARY_API_SECRET ?? '6QgtDOmncOh0g-WbkQP47LdP_NE',
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 // Use memory storage — files go to Cloudinary, not disk
@@ -64,6 +68,7 @@ function uploadToCloudinary(buffer: Buffer, filename: string): Promise<{url: str
 export class TempUploadController {
   constructor() {}
 
+  @authenticate('jwt')
   @post('/uploads/temp', {
     responses: {
       200: {
