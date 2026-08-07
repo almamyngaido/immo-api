@@ -152,6 +152,7 @@ export class TransactionController {
         const dateDebut = new Date();
         const dateFin = new Date(dateDebut);
         dateFin.setMonth(dateFin.getMonth() + 1);
+        const user = await this.userRepo.findById(transaction.user_id);
 
         await this.userRepo.updateById(transaction.user_id, {
           abonnement: {
@@ -163,7 +164,7 @@ export class TransactionController {
             paiement_methode: transaction.methode,
             transaction_id: transaction.id,
           } as any,
-          'badges.premium': true,
+          badges: {...(user.badges as any), premium: true},
         } as any);
       } else if (transaction.type === 'boost_annonce' && transaction.bien_id) {
         const dateDebut = new Date();

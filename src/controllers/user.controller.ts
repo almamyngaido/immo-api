@@ -205,13 +205,16 @@ export class UserController {
     body: {statut: string; admin_note?: string},
   ): Promise<void> {
     this.requireAdmin(currentUser);
+    const user = await this.userRepository.findById(id);
     await this.userRepository.updateById(id, {
       verification: {
         statut: body.statut,
         admin_note: body.admin_note,
         date_validation: body.statut === 'verifie' ? new Date() : undefined,
       } as any,
-      ...(body.statut === 'verifie' ? {'badges.verifie': true} as any : {}),
+      ...(body.statut === 'verifie'
+        ? {badges: {...(user.badges as any), verifie: true}}
+        : {}),
     });
   }
 

@@ -351,6 +351,7 @@ export class PaymentController {
             paiement_methode: 'wave_test',
             transaction_id: transactionId,
           },
+          badges: {...(user.badges as any), premium: true},
           limites,
           updatedAt: new Date(),
         } as any);
@@ -370,6 +371,7 @@ export class PaymentController {
         const limites = getLimitesParPlan(plan);
         const dateDebut = new Date();
         const dateFin = new Date(Date.now() + 30 * 86400000);
+        const user = await this.userRepo.findById(transaction.user_id);
 
         await this.userRepo.updateById(transaction.user_id, {
           abonnement: {
@@ -381,7 +383,7 @@ export class PaymentController {
             paiement_methode: 'wave',
             transaction_id: transaction.id,
           },
-          'badges.premium': plan === 'premium' || plan === 'pro',
+          badges: {...(user.badges as any), premium: true},
           limites,
           updatedAt: new Date(),
         } as any);
