@@ -7,20 +7,26 @@
  *   ONESIGNAL_REST_API_KEY — REST API Key (depuis OneSignal → Settings → Keys & IDs)
  */
 import {injectable} from '@loopback/core';
+import {repository} from '@loopback/repository';
 import https from 'https';
 import {Bien} from '../models';
 import {AlerteRecherche} from '../models/alerte-recherche.model';
+import {AlerteRechercheRepository} from '../repositories';
 
 const ONESIGNAL_APP_ID       = process.env.ONESIGNAL_APP_ID       ?? '';
 // Accepter les deux noms possibles de la variable Railway
 const ONESIGNAL_REST_API_KEY  = process.env.ONESIGNAL_REST_API_KEY  ?? process.env.ONESIGNAL_API_KEY ?? '';
 
-// Diagnostic au démarrage
-console.log('[AlerteService] ONESIGNAL_APP_ID:', ONESIGNAL_APP_ID ? `${ONESIGNAL_APP_ID.slice(0, 8)}...` : 'MANQUANT');
-console.log('[AlerteService] ONESIGNAL_REST_API_KEY:', ONESIGNAL_REST_API_KEY ? `${ONESIGNAL_REST_API_KEY.slice(0, 8)}...` : 'MANQUANT');
+// Diagnostic au démarrage — présence uniquement, jamais la valeur (même partielle)
+console.log('[AlerteService] ONESIGNAL_APP_ID:', ONESIGNAL_APP_ID ? 'OK' : 'MANQUANT');
+console.log('[AlerteService] ONESIGNAL_REST_API_KEY:', ONESIGNAL_REST_API_KEY ? 'OK' : 'MANQUANT');
 
 @injectable()
 export class AlerteService {
+  constructor(
+    @repository(AlerteRechercheRepository)
+    private alerteRepository: AlerteRechercheRepository,
+  ) {}
 
   /**
    * Appelé quand un bien passe en statut 'publie'.
@@ -48,7 +54,13 @@ export class AlerteService {
 
     for (const alerte of correspondances) {
       try {
-        await this._envoyerNotification(alerte, bien);
+        const envoyee = await this._envoyerNotification(alerte, bien);
+        if (envoyee) {
+          await this.alerteRepository.updateById(alerte.id, {
+            nb_notifications_envoyees: (alerte.nb_notifications_envoyees ?? 0) + 1,
+            derniere_notification: new Date(),
+          });
+        }
       } catch (err) {
         console.error('[AlerteService] Erreur notification', alerte.id, err);
       }
@@ -108,10 +120,10 @@ export class AlerteService {
   private _envoyerNotification(
     alerte: AlerteRecherche,
     bien: Bien,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) {
       console.warn('[AlerteService] OneSignal non configuré (ONESIGNAL_APP_ID / ONESIGNAL_REST_API_KEY manquants)');
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
 
     console.log(`[AlerteService] Envoi notification → subscription_id: ${alerte.onesignal_subscription_id} | alerte: ${alerte.id}`);
@@ -140,12 +152,12 @@ export class AlerteService {
     return new Promise((resolve, reject) => {
       const req = https.request(
         {
-          hostname: 'onesignal.com',
-          path:     '/api/v1/notifications',
+          hostname: 'api.onesignal.com',
+          path:     '/notifications',
           method:   'POST',
           headers: {
             'Content-Type':  'application/json',
-            'Authorization': `Basic ${ONESIGNAL_REST_API_KEY}`,
+            'Authorization': `Key ${ONESIGNAL_REST_API_KEY}`,
             'Content-Length': Buffer.byteLength(payload),
           },
         },
@@ -153,12 +165,13 @@ export class AlerteService {
           let data = '';
           res.on('data', d => (data += d));
           res.on('end', () => {
-            if (res.statusCode && res.statusCode >= 400) {
+            const succes = !!res.statusCode && res.statusCode < 400;
+            if (!succes) {
               console.error(`[AlerteService] OneSignal HTTP ${res.statusCode}:`, data);
             } else {
               console.log(`[AlerteService] OneSignal réponse ${res.statusCode}:`, data);
             }
-            resolve();
+            resolve(succes);
           });
         },
       );
