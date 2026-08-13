@@ -30,6 +30,7 @@ import {comparePassword} from '../services/hash.password';
 import {JwtService} from '../services/jwt.service';
 import {sanitiserEmail, sanitiserTexte, sanitiserTelephone} from '../utils/sanitizer';
 import {diwaneBien} from '../utils/diwane-bien.utils';
+import {appLinkInterstitialHtml, webAppUrl} from '../utils/app-link.utils';
 
 const SENEGAL_PHONE_REGEX = /^\+221[37][0-9]{8}$/;
 
@@ -254,10 +255,15 @@ export class DiwaneUsersController {
       } as any);
     }
 
-    // Redirige directement dans l'app (comme le retour Wave) — la confirmation
-    // visuelle est affichée côté Flutter par DeepLinkService, pas ici : une
-    // page web que l'utilisateur quitte immédiatement n'a pas d'intérêt.
-    res.redirect(`diwane://verify-email?status=${user ? 'success' : 'invalid'}`);
+    // Tente d'ouvrir l'app mobile (diwane://) et, si rien ne se passe (desktop,
+    // navigateur, app non installée), bascule vers l'app web Flutter — la
+    // confirmation visuelle est affichée côté Flutter (mobile ou web), pas ici.
+    const status = user ? 'success' : 'invalid';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(appLinkInterstitialHtml({
+      appUrl: `diwane://verify-email?status=${status}`,
+      webUrl: webAppUrl(`/diwane/verify-email?status=${status}`),
+    }));
     return res;
   }
 

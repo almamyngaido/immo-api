@@ -19,6 +19,7 @@ import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
 import {getLimitesParPlan} from '../models';
 import {BienRepository, TransactionRepository, UserRepository} from '../repositories';
 import {WaveService} from '../services/wave.service';
+import {appLinkInterstitialHtml, webAppUrl} from '../utils/app-link.utils';
 
 function genRef(prefix: string, id: string): string {
   const ts = Date.now().toString(36).toUpperCase();
@@ -250,7 +251,12 @@ export class PaymentController {
     @inject(RestBindings.Http.RESPONSE) res: Response,
   ): Promise<void> {
     const deepLink = process.env.FLUTTER_DEEP_LINK ?? 'diwane://payment';
-    res.redirect(`${deepLink}/success?ref=${encodeURIComponent(ref ?? '')}`);
+    const refParam = encodeURIComponent(ref ?? '');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(appLinkInterstitialHtml({
+      appUrl: `${deepLink}/success?ref=${refParam}`,
+      webUrl: webAppUrl(`/diwane/payment-result?status=success&ref=${refParam}`),
+    }));
   }
 
   // ── GET /api/payments/wave/cancel ─────────────────────────────────────────────
@@ -264,7 +270,12 @@ export class PaymentController {
     @inject(RestBindings.Http.RESPONSE) res: Response,
   ): Promise<void> {
     const deepLink = process.env.FLUTTER_DEEP_LINK ?? 'diwane://payment';
-    res.redirect(`${deepLink}/cancel?ref=${encodeURIComponent(ref ?? '')}`);
+    const refParam = encodeURIComponent(ref ?? '');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(appLinkInterstitialHtml({
+      appUrl: `${deepLink}/cancel?ref=${refParam}`,
+      webUrl: webAppUrl(`/diwane/payment-result?status=cancel&ref=${refParam}`),
+    }));
   }
 
   // ── GET /api/payments/statut/:transactionId ───────────────────────────────────

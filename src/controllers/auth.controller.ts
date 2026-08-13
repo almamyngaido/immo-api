@@ -24,6 +24,7 @@ import {UserRepository} from '../repositories';
 import {comparePassword} from '../services/hash.password';
 import {JwtService} from '../services/jwt.service';
 import {EmailService} from '../services/mailer';
+import {appLinkInterstitialHtml, webAppUrl} from '../utils/app-link.utils';
 
 require('dotenv').config();
 
@@ -398,7 +399,11 @@ h2{color:#e53e3e}.badge{font-size:56px;margin-bottom:16px}</style></head>
       return res;
     }
 
-    res.redirect(`diwane://reset-password?token=${encodeURIComponent(token)}`);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(appLinkInterstitialHtml({
+      appUrl: `diwane://reset-password?token=${encodeURIComponent(token)}`,
+      webUrl: webAppUrl(`/diwane/reset-password?token=${encodeURIComponent(token)}`),
+    }));
     return res;
   }
 
