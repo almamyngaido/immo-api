@@ -246,31 +246,18 @@ export class DiwaneUsersController {
       ? await this.userRepository.findOne({where: {token_email: token} as any}).catch(() => null)
       : null;
 
-    let html: string;
     if (user) {
       await this.userRepository.updateById(user.id!, {
         email_verifie: true,
         token_email: undefined,
         updatedAt: new Date(),
       } as any);
-      html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Email vérifié</title>
-<style>body{font-family:Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;margin:0}
-.box{background:#fff;border-radius:12px;padding:40px;max-width:440px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.1)}
-h2{color:#1B2A4A}.badge{font-size:56px;margin-bottom:16px}</style></head>
-<body><div class="box"><div class="badge">✅</div><h2>Email vérifié !</h2>
-<p>Bonjour <strong>${user.prenom}</strong>, votre adresse email a été vérifiée avec succès.</p>
-<p>Vous pouvez maintenant vous connecter sur l'application Diwane.</p></div></body></html>`;
-    } else {
-      html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Lien invalide</title>
-<style>body{font-family:Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;margin:0}
-.box{background:#fff;border-radius:12px;padding:40px;max-width:440px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.1)}
-h2{color:#e53e3e}.badge{font-size:56px;margin-bottom:16px}</style></head>
-<body><div class="box"><div class="badge">❌</div><h2>Lien invalide</h2>
-<p>Ce lien de vérification est invalide ou a déjà été utilisé.</p></div></body></html>`;
     }
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
+    // Redirige directement dans l'app (comme le retour Wave) — la confirmation
+    // visuelle est affichée côté Flutter par DeepLinkService, pas ici : une
+    // page web que l'utilisateur quitte immédiatement n'a pas d'intérêt.
+    res.redirect(`diwane://verify-email?status=${user ? 'success' : 'invalid'}`);
     return res;
   }
 
