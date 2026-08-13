@@ -10,6 +10,9 @@ import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
 import {BienRepository, FavoriRepository, UserRepository} from '../repositories';
 import {diwaneBien} from '../utils/diwane-bien.utils';
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const {ObjectId} = require('mongodb');
+
 export class DiwaneFavorisController {
   constructor(
     @repository(FavoriRepository)
@@ -59,8 +62,11 @@ export class DiwaneFavorisController {
     });
 
     // Vérifier doublon
+    // acheteur_id/bien_id sont stockés en ObjectId côté Mongo : un filtre where
+    // en string ne matche jamais (le connecteur ne caste pas ces champs), il
+    // faut donc caster explicitement, sinon les doublons ne sont jamais détectés.
     const existing = await this.favoriRepository.findOne({
-      where: {acheteur_id: acheteurId, bien_id: body.bien_id} as any,
+      where: {acheteur_id: new ObjectId(acheteurId), bien_id: new ObjectId(body.bien_id)} as any,
     });
     if (existing) {
       throw new HttpErrors.Conflict('Ce bien est déjà dans vos favoris.');
@@ -134,13 +140,17 @@ export class DiwaneFavorisController {
     @inject(SecurityBindings.USER) currentUser: UserProfile,
   ): Promise<object[]> {
     const favoris = await this.favoriRepository.find({
-      where:  {acheteur_id: currentUser[securityId]} as any,
+      where:  {acheteur_id: new ObjectId(currentUser[securityId])} as any,
       order:  ['createdAt DESC'],
     });
 
     if (favoris.length === 0) return [];
 
-    const bienIds = favoris.map(f => f.bien_id);
+    // Capturés ici (valeurs primitives) plutôt que relus via f.bien_id plus bas :
+    // le connecteur Mongo mute silencieusement bien_id (string → ObjectID) sur
+    // l'instance Favori dès qu'une requête ultérieure (ex. userRepository.find)
+    // s'exécute, ce qui casse le lookup dans biensMap si on le relit après coup.
+    const bienIds = favoris.map(f => String(f.bien_id));
     const biens   = await this.bienRepository.find({
       where: {id: {inq: bienIds}} as any,
     });
@@ -154,9 +164,9 @@ export class DiwaneFavorisController {
     });
     const courtierMap = new Map(courtiers.map(c => [c.id!, c]));
 
-    return favoris
-      .map(f => {
-        const bien = biensMap.get(f.bien_id);
+    const result = favoris
+      .map((f, i) => {
+        const bien = biensMap.get(bienIds[i]);
         if (!bien) return null;
         return {
           favori_id:  f.id,
@@ -166,5 +176,6 @@ export class DiwaneFavorisController {
         };
       })
       .filter(Boolean) as object[];
+    return result;
   }
 }
