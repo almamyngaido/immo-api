@@ -27,11 +27,12 @@ export class UserRepository extends DefaultCrudRepository<
     return super.create(entity);
   }
 
-  // Hash mot_de_passe si fourni dans un patch
+  // updateById() délègue en interne à updateAll() dans LoopBack (voir
+  // legacy-juggler-bridge.js) — hasher ici en plus provoquait un double
+  // hachage (hash d'un hash), qui cassait silencieusement tout mot de passe
+  // changé via updateById (réinitialisation notamment). Le hachage se fait
+  // une seule fois, dans updateAll ci-dessous.
   async updateById(id: string, data: Partial<User>): Promise<void> {
-    if (data.mot_de_passe) {
-      data.mot_de_passe = await hashPassword(data.mot_de_passe);
-    }
     return super.updateById(id, data);
   }
 

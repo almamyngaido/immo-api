@@ -54,11 +54,10 @@ export class UtilisateurRepository extends DefaultCrudRepository<
     return super.create(entity);
   }
 
-  // Override updateById to hash password if provided
+  // updateById() délègue en interne à updateAll() dans LoopBack — hasher ici
+  // en plus provoquait un double hachage (hash d'un hash). Le hachage se
+  // fait une seule fois, dans updateAll ci-dessous.
   async updateById(id: string, data: Partial<Utilisateur>): Promise<void> {
-    if (data.motDePasse) {
-      data.motDePasse = await hashPassword(data.motDePasse);
-    }
     return super.updateById(id, data);
   }
 

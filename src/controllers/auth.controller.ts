@@ -13,6 +13,8 @@ import {
   param,
   post,
   requestBody,
+  Response,
+  RestBindings,
   SchemaObject,
 } from '@loopback/rest';
 import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
@@ -372,6 +374,76 @@ export class AuthController {
       reset_password_expiry: undefined,
     });
     await this.emailService.sendPasswordChangedEmail(user.email, user.prenom);
+  }
+
+  // ─── Page HTML de réinitialisation (ouverte depuis le lien email) ─────────
+  // Le lien email pointe ici plutôt que vers un frontend web séparé (qui
+  // n'existe pas pour cette app mobile) — le formulaire appelle POST
+  // /reset-password ci-dessus via fetch().
+  @get('/reset-password', {
+    responses: {'200': {description: 'Page HTML de réinitialisation'}},
+  })
+  async resetPasswordPage(
+    @param.query.string('token') token: string,
+    @inject(RestBindings.Http.RESPONSE) res: Response,
+  ): Promise<Response> {
+    const style = `body{font-family:Arial;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;margin:0}
+.box{background:#fff;border-radius:12px;padding:40px;max-width:440px;width:90%;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+h2{color:#1B2A4A}.badge{font-size:56px;margin-bottom:16px}
+input{width:100%;box-sizing:border-box;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;font-size:15px}
+button{width:100%;padding:12px;margin-top:8px;background:#1B2A4A;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+.err{color:#e53e3e;font-size:13px;margin-top:8px;min-height:18px}`;
+
+    if (!token) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Lien invalide</title>
+<style>${style}</style></head><body><div class="box"><div class="badge">❌</div><h2>Lien invalide</h2>
+<p>Ce lien de réinitialisation est invalide.</p></div></body></html>`);
+      return res;
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nouveau mot de passe</title><style>${style}</style></head>
+<body><div class="box" id="box">
+<div class="badge">🔑</div><h2>Nouveau mot de passe</h2>
+<p>Choisissez un nouveau mot de passe pour votre compte Diwane.</p>
+<input type="password" id="pwd" placeholder="Nouveau mot de passe (min. 8 caractères)" minlength="8">
+<input type="password" id="pwd2" placeholder="Confirmer le mot de passe" minlength="8">
+<div class="err" id="err"></div>
+<button id="submit" onclick="submitReset()">Réinitialiser</button>
+</div>
+<script>
+async function submitReset() {
+  const pwd = document.getElementById('pwd').value;
+  const pwd2 = document.getElementById('pwd2').value;
+  const err = document.getElementById('err');
+  const btn = document.getElementById('submit');
+  err.textContent = '';
+  if (pwd.length < 8) { err.textContent = 'Minimum 8 caractères.'; return; }
+  if (pwd !== pwd2) { err.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+  btn.disabled = true; btn.textContent = 'Réinitialisation…';
+  try {
+    const res = await fetch('/reset-password', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({token: ${JSON.stringify(token)}, newPassword: pwd}),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error?.message || 'Une erreur est survenue.');
+    }
+    document.getElementById('box').innerHTML = '<div class="badge">✅</div><h2>Mot de passe réinitialisé !</h2><p>Vous pouvez maintenant vous connecter sur l\\'application Diwane avec votre nouveau mot de passe.</p>';
+  } catch (e) {
+    err.textContent = e.message;
+    btn.disabled = false; btn.textContent = 'Réinitialiser';
+  }
+}
+</script>
+</body></html>`);
+    return res;
   }
 
   // ─── Vérification email legacy (lien) ────────────────────────────────────

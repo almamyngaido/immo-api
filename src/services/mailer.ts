@@ -201,8 +201,10 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(email: string, firstName: string, resetToken: string): Promise<void> {
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'
-      }/reset-password?token=${resetToken}`;
+    // Le lien pointe vers la page HTML servie par ce backend (AuthController.resetPasswordPage)
+    // plutôt que FRONTEND_URL, qui ne correspond à aucun frontend web déployé pour cette app mobile.
+    const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+    const resetUrl = `${appUrl}/reset-password?token=${resetToken}`;
 
     const htmlContent = `
       <!DOCTYPE html>
