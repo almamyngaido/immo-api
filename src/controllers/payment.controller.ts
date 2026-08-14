@@ -107,6 +107,7 @@ export class PaymentController {
       montant_fcfa: montant,
       description:  `Abonnement Diwane ${body.plan.charAt(0).toUpperCase() + body.plan.slice(1)} — 1 mois`,
       reference,
+      transaction_id: transaction.id!,
       telephone_client: courtier.telephone,
     });
 
@@ -177,6 +178,7 @@ export class PaymentController {
       montant_fcfa: montant,
       description:  `Boost annonce Diwane — ${body.duree_jours} jours (${(bien as any).reference ?? bien.id})`,
       reference,
+      transaction_id: transaction.id!,
       telephone_client: courtier.telephone,
     });
 
@@ -194,19 +196,26 @@ export class PaymentController {
     responses: {'200': {description: 'OK'}},
   })
   async webhookWave(
-    @requestBody({content: {'application/json': {schema: {type: 'object'}}}})
-    body: any,
+    @requestBody({
+      content: {
+        'application/json': {
+          'x-parser': 'raw',
+          schema: {type: 'string', format: 'binary'},
+        },
+      },
+    })
+    rawBody: Buffer,
     @inject(RestBindings.Http.REQUEST) req: Request,
   ): Promise<{received: boolean}> {
-    // Valider la signature Wave
+    // Valider la signature Wave sur les octets bruts exacts reçus (pas une re-sérialisation)
     const signature = req.headers['wave-signature'] as string ?? '';
-    const rawPayload = JSON.stringify(body);
+    const rawPayload = rawBody.toString('utf8');
+    const body = JSON.parse(rawPayload);
 
-    if (!this.waveService.validerSignatureWebhook(rawPayload, signature)) {
-      // En sandbox, la signature peut être absente — ne pas bloquer en dev
-      if (process.env.NODE_ENV === 'production') {
-        throw new HttpErrors.Unauthorized('Signature Wave invalide.');
-      }
+    // Le secret n'étant pas encore configuré partout, on ne bloque que s'il est présent :
+    // dès que WAVE_WEBHOOK_SECRET est renseigné (même hors prod), une signature invalide est rejetée.
+    if (process.env.WAVE_WEBHOOK_SECRET && !this.waveService.validerSignatureWebhook(rawPayload, signature)) {
+      throw new HttpErrors.Unauthorized('Signature Wave invalide.');
     }
 
     const sessionId = body?.data?.id ?? body?.id;
@@ -248,14 +257,16 @@ export class PaymentController {
   })
   async paiementSucces(
     @param.query.string('ref') ref: string,
+    @param.query.string('tx') tx: string,
     @inject(RestBindings.Http.RESPONSE) res: Response,
   ): Promise<void> {
     const deepLink = process.env.FLUTTER_DEEP_LINK ?? 'diwane://payment';
     const refParam = encodeURIComponent(ref ?? '');
+    const txParam = encodeURIComponent(tx ?? '');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(appLinkInterstitialHtml({
-      appUrl: `${deepLink}/success?ref=${refParam}`,
-      webUrl: webAppUrl(`/diwane/payment-result?status=success&ref=${refParam}`),
+      appUrl: `${deepLink}/success?ref=${refParam}&tx=${txParam}`,
+      webUrl: webAppUrl(`/diwane/payment-result?status=success&ref=${refParam}&tx=${txParam}`),
     }));
   }
 
@@ -267,14 +278,16 @@ export class PaymentController {
   })
   async paiementAnnule(
     @param.query.string('ref') ref: string,
+    @param.query.string('tx') tx: string,
     @inject(RestBindings.Http.RESPONSE) res: Response,
   ): Promise<void> {
     const deepLink = process.env.FLUTTER_DEEP_LINK ?? 'diwane://payment';
     const refParam = encodeURIComponent(ref ?? '');
+    const txParam = encodeURIComponent(tx ?? '');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(appLinkInterstitialHtml({
-      appUrl: `${deepLink}/cancel?ref=${refParam}`,
-      webUrl: webAppUrl(`/diwane/payment-result?status=cancel&ref=${refParam}`),
+      appUrl: `${deepLink}/cancel?ref=${refParam}&tx=${txParam}`,
+      webUrl: webAppUrl(`/diwane/payment-result?status=cancel&ref=${refParam}&tx=${txParam}`),
     }));
   }
 
@@ -312,6 +325,12 @@ export class PaymentController {
           } as any);
           await this._confirmerPaiement(transaction);
           transaction.statut = 'succes';
+        } else if (waveStatut.statut === 'cancelled') {
+          await this.transactionRepo.updateById(transaction.id!, {
+            statut: 'echec',
+            updatedAt: new Date(),
+          } as any);
+          transaction.statut = 'echec';
         }
       } catch (e) {
         console.error('[Payment] Erreur vérification Wave:', e);

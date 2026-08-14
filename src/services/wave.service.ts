@@ -10,12 +10,27 @@ import * as https from 'https';
 export class WaveService {
   private apiUrl = process.env.WAVE_API_URL ?? 'https://api.wave.com/v1';
   private apiKey = process.env.WAVE_API_KEY ?? '';
+  private signingSecret = process.env.WAVE_SIGNING_SECRET ?? '';
   private webhookSecret = process.env.WAVE_WEBHOOK_SECRET ?? '';
+
+  // ── Signature des requêtes sortantes (request signing Wave, optionnel) ──────
+  // Format : "t={timestamp},v1={hmac_hex}" où hmac = HMAC-SHA256(signingSecret, timestamp + body)
+  // https://docs.wave.com/business#request-signing
+  private _signatureHeader(rawBody: string): string | undefined {
+    if (!this.signingSecret) return undefined;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const hmac = crypto
+      .createHmac('sha256', this.signingSecret)
+      .update(`${timestamp}${rawBody}`)
+      .digest('hex');
+    return `t=${timestamp},v1=${hmac}`;
+  }
 
   // ── Requête HTTP interne (pas de dépendance axios) ──────────────────────────
   private async _post(path: string, body: object): Promise<any> {
     const data = JSON.stringify(body);
     const url = new URL(path, this.apiUrl + '/');
+    const signature = this._signatureHeader(data);
 
     return new Promise((resolve, reject) => {
       const req = https.request(
@@ -27,6 +42,7 @@ export class WaveService {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(data),
+            ...(signature ? {'Wave-Signature': signature} : {}),
           },
         },
         res => {
@@ -54,6 +70,8 @@ export class WaveService {
 
   private async _get(path: string): Promise<any> {
     const url = new URL(path, this.apiUrl + '/');
+    // Pour un GET, la signature porte sur le timestamp seul (body vide).
+    const signature = this._signatureHeader('');
 
     return new Promise((resolve, reject) => {
       const req = https.request(
@@ -61,7 +79,10 @@ export class WaveService {
           hostname: url.hostname,
           path: url.pathname + url.search,
           method: 'GET',
-          headers: {Authorization: `Bearer ${this.apiKey}`},
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            ...(signature ? {'Wave-Signature': signature} : {}),
+          },
         },
         res => {
           let raw = '';
@@ -90,22 +111,23 @@ export class WaveService {
     montant_fcfa: number;
     description: string;
     reference: string;
+    transaction_id: string;
     telephone_client?: string;
   }): Promise<{checkout_url: string; wave_session_id: string}> {
     const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
+    const tx = encodeURIComponent(params.transaction_id);
 
     const body: any = {
       amount: params.montant_fcfa.toString(),
       currency: 'XOF',
-      error_url: `${appUrl}/api/payments/wave/cancel?ref=${params.reference}`,
-      success_url: `${appUrl}/api/payments/wave/success?ref=${params.reference}`,
+      error_url: `${appUrl}/api/payments/wave/cancel?ref=${params.reference}&tx=${tx}`,
+      success_url: `${appUrl}/api/payments/wave/success?ref=${params.reference}&tx=${tx}`,
       client_reference: params.reference,
-      business_name: 'Diwane',
-      payment_description: params.description,
     };
 
+    // Restreint le paiement au numéro Wave du courtier (son propre abonnement/boost).
     if (params.telephone_client) {
-      body.client = {phone_number: params.telephone_client};
+      body.restrict_payer_mobile = params.telephone_client;
     }
 
     const response = await this._post('checkout/sessions', body);
@@ -117,17 +139,24 @@ export class WaveService {
   }
 
   // ── Valider la signature d'un webhook Wave ───────────────────────────────────
-  validerSignatureWebhook(rawPayload: string, signature: string): boolean {
-    if (!this.webhookSecret || !signature) return false;
+  // Header "Wave-Signature: t={timestamp},v1={hmac_hex}" — hmac = HMAC-SHA256(webhookSecret, timestamp + rawBody)
+  // https://docs.wave.com/webhook#webhooks
+  validerSignatureWebhook(rawPayload: string, signatureHeader: string): boolean {
+    if (!this.webhookSecret || !signatureHeader) return false;
     try {
+      const parts = Object.fromEntries(
+        signatureHeader.split(',').map(kv => kv.split('=') as [string, string]),
+      );
+      const timestamp = parts['t'];
+      const v1 = parts['v1'];
+      if (!timestamp || !v1) return false;
+
       const expected = crypto
         .createHmac('sha256', this.webhookSecret)
-        .update(rawPayload)
+        .update(`${timestamp}${rawPayload}`)
         .digest('hex');
-      return crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expected),
-      );
+
+      return crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
     } catch {
       return false;
     }
@@ -135,7 +164,7 @@ export class WaveService {
 
   // ── Vérifier le statut d'une session Wave ────────────────────────────────────
   async verifierSession(sessionId: string): Promise<{
-    statut: 'pending' | 'succeeded' | 'failed';
+    statut: 'processing' | 'cancelled' | 'succeeded';
     montant: number;
   }> {
     const response = await this._get(`checkout/sessions/${sessionId}`);

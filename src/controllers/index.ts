@@ -16,7 +16,6 @@ export * from './agence.controller';
 export * from './alerte-recherche.controller';
 export * from './demande-contact.controller';
 export * from './avis.controller';
-export * from './transaction.controller';
 export * from './favori.controller';
 export * from './message.controller';
 
