@@ -39,7 +39,7 @@ export class DiwanePlansController {
         {
           id: 'premium',
           nom: 'Premium',
-          prix_fcfa: 10000,
+          prix_fcfa: 20, // TODO(test-wave): remettre 10000 après les tests de paiement réel.
           badge: 'Premium',
           recommande: true,
           limites: getLimitesParPlan('premium'),
@@ -58,7 +58,7 @@ export class DiwanePlansController {
         {
           id: 'pro',
           nom: 'Pro',
-          prix_fcfa: 35000,
+          prix_fcfa: 50, // TODO(test-wave): remettre 35000 après les tests de paiement réel.
           badge: 'Pro',
           limites: getLimitesParPlan('pro'),
           fonctionnalites: [

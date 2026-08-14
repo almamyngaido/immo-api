@@ -85,7 +85,8 @@ export class PaymentController {
       throw new HttpErrors.Forbidden('Réservé aux courtiers.');
     }
 
-    const montants: Record<string, number> = {premium: 10000, pro: 35000};
+    // TODO(test-wave): remettre {premium: 10000, pro: 35000} après les tests de paiement réel.
+    const montants: Record<string, number> = {premium: 20, pro: 50};
     const montant = montants[body.plan];
     const reference = genRef('SUB', userId);
 
