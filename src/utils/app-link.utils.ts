@@ -19,23 +19,23 @@ export function appLinkInterstitialHtml(params: {appUrl: string; webUrl: string}
 .box{background:#fff;border-radius:12px;padding:40px;max-width:440px;width:90%;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.1)}
 .spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#0f3d5c;border-radius:50%;margin:0 auto 16px;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-p{color:#4a5568}a{color:#0f3d5c}</style></head>
+p{color:#4a5568}
+.btn{display:inline-block;margin-top:12px;padding:12px 24px;background:#0f3d5c;color:#fff;text-decoration:none;border-radius:8px;font-weight:600}
+a.secondary{color:#0f3d5c;display:block;margin-top:14px;font-size:14px}</style></head>
 <body>
 <div class="box">
   <div class="spinner"></div>
   <p>Redirection vers Diwane…</p>
-  <p><a href="${webUrl}">Cliquez ici si rien ne se passe</a></p>
+  <a class="btn" href="${appUrl}">Ouvrir l'app Diwane</a>
+  <a class="secondary" href="${webUrl}">Continuer sur le web</a>
 </div>
 <script>
-  var webUrl = ${JSON.stringify(webUrl)};
-  var switchedAway = false;
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) switchedAway = true;
-  });
+  // Tentative automatique — fonctionne sur la plupart des appareils, mais certains
+  // navigateurs bloquent silencieusement la redirection vers un schéma personnalisé
+  // sans geste utilisateur direct. Dans ce cas la page reste affichée avec les deux
+  // boutons ci-dessus comme repli fiable, plutôt que de forcer une redirection web
+  // automatique qui empêcherait l'utilisateur de choisir "Ouvrir l'app".
   window.location.href = ${JSON.stringify(appUrl)};
-  setTimeout(function () {
-    if (!switchedAway) window.location.href = webUrl;
-  }, 1200);
 </script>
 </body></html>`;
 }

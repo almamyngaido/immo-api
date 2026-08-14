@@ -16,7 +16,7 @@ import {
   RestBindings,
 } from '@loopback/rest';
 import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
-import {getLimitesParPlan} from '../models';
+import {getLimitesParPlan, Transaction} from '../models';
 import {BienRepository, TransactionRepository, UserRepository} from '../repositories';
 import {WaveService} from '../services/wave.service';
 import {appLinkInterstitialHtml, webAppUrl} from '../utils/app-link.utils';
@@ -88,6 +88,19 @@ export class PaymentController {
     // TODO(test-wave): remettre {premium: 10000, pro: 35000} après les tests de paiement réel.
     const montants: Record<string, number> = {premium: 20, pro: 50};
     const montant = montants[body.plan];
+
+    const pending = await this._transactionPendanteRecente({
+      user_id: userId,
+      type: `abonnement_${body.plan}`,
+    });
+    if (pending) {
+      return {
+        checkout_url:   pending.checkout_url!,
+        transaction_id: pending.id!,
+        reference:      pending.reference_externe!,
+      };
+    }
+
     const reference = genRef('SUB', userId);
 
     const transaction = await this.transactionRepo.create({
@@ -114,9 +127,29 @@ export class PaymentController {
 
     await this.transactionRepo.updateById(transaction.id!, {
       wave_checkout_id: wave_session_id,
+      checkout_url,
     } as any);
 
     return {checkout_url, transaction_id: transaction.id!, reference};
+  }
+
+  // ── Réutilise une session Wave encore valide plutôt que d'en créer une nouvelle ─
+  // Évite de facturer deux fois le même abonnement/boost si le client réessaie
+  // pendant qu'une session précédente est toujours ouverte côté Wave (~30 min).
+  private async _transactionPendanteRecente(where: object): Promise<Transaction | undefined> {
+    const seuil = new Date(Date.now() - 25 * 60 * 1000);
+    const [pending] = await this.transactionRepo.find({
+      where: {
+        ...where,
+        statut: {inq: ['initiee', 'en_attente']},
+        wave_checkout_id: {neq: null},
+        checkout_url: {neq: null},
+        createdAt: {gte: seuil},
+      } as any,
+      order: ['createdAt DESC'],
+      limit: 1,
+    });
+    return pending;
   }
 
   // ── POST /api/payments/boost/initier ─────────────────────────────────────────
@@ -159,6 +192,19 @@ export class PaymentController {
     const montant = tarifs[body.duree_jours];
     if (!montant) throw new HttpErrors.BadRequest('Durée invalide. Choisir 3, 7, 14 ou 30 jours.');
 
+    const pendingBoost = await this._transactionPendanteRecente({
+      user_id: userId,
+      bien_id: body.bien_id,
+      type: 'boost_annonce',
+    });
+    if (pendingBoost) {
+      return {
+        checkout_url:   pendingBoost.checkout_url!,
+        transaction_id: pendingBoost.id!,
+        reference:      pendingBoost.reference_externe!,
+      };
+    }
+
     const reference = genRef('BST', body.bien_id);
 
     const transaction = await this.transactionRepo.create({
@@ -185,6 +231,7 @@ export class PaymentController {
 
     await this.transactionRepo.updateById(transaction.id!, {
       wave_checkout_id: wave_session_id,
+      checkout_url,
     } as any);
 
     return {checkout_url, transaction_id: transaction.id!, reference};

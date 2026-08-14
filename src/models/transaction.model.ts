@@ -64,6 +64,9 @@ export class Transaction extends Entity {
   wave_checkout_id?: string;
 
   @property({type: 'string'})
+  checkout_url?: string;
+
+  @property({type: 'string'})
   orange_transaction_id?: string;
 
   @property({
