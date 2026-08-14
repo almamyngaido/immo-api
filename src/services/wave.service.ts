@@ -142,22 +142,48 @@ export class WaveService {
   // Header "Wave-Signature: t={timestamp},v1={hmac_hex}" — hmac = HMAC-SHA256(webhookSecret, timestamp + rawBody)
   // https://docs.wave.com/webhook#webhooks
   validerSignatureWebhook(rawPayload: string, signatureHeader: string): boolean {
-    if (!this.webhookSecret || !signatureHeader) return false;
+    if (!this.webhookSecret) {
+      console.warn('[Wave Webhook] WAVE_WEBHOOK_SECRET non configuré côté serveur.');
+      return false;
+    }
+    if (!signatureHeader) {
+      console.warn('[Wave Webhook] aucun en-tête Wave-Signature reçu.');
+      return false;
+    }
     try {
-      const parts = Object.fromEntries(
-        signatureHeader.split(',').map(kv => kv.split('=') as [string, string]),
-      );
+      const parts: Record<string, string> = {};
+      for (const kv of signatureHeader.split(',')) {
+        const [key, value] = kv.split('=').map(s => s.trim());
+        if (key) parts[key] = value ?? '';
+      }
       const timestamp = parts['t'];
       const v1 = parts['v1'];
-      if (!timestamp || !v1) return false;
+      if (!timestamp || !v1) {
+        console.warn('[Wave Webhook] en-tête de signature mal formé:', JSON.stringify(signatureHeader));
+        return false;
+      }
 
       const expected = crypto
         .createHmac('sha256', this.webhookSecret)
         .update(`${timestamp}${rawPayload}`)
         .digest('hex');
 
-      return crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
-    } catch {
+      const valid = v1.length === expected.length &&
+        crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
+
+      // TODO(test-wave): retirer ce log une fois la vérification confirmée fonctionnelle.
+      if (!valid) {
+        console.warn(
+          '[Wave Webhook] signature invalide — reçu:', v1,
+          '| attendu:', expected,
+          '| timestamp:', timestamp,
+          '| body_len:', rawPayload.length,
+          '| body_preview:', rawPayload.slice(0, 200),
+        );
+      }
+      return valid;
+    } catch (e) {
+      console.warn('[Wave Webhook] erreur vérification signature:', e);
       return false;
     }
   }
