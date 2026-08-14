@@ -199,10 +199,9 @@ export class PaymentController {
   async webhookWave(
     @requestBody({
       content: {
-        'application/json': {
-          'x-parser': 'raw',
-          schema: {type: 'string', format: 'binary'},
-        },
+        // Pas de schéma déclaré : LoopBack valide via AJV contre le schéma sinon
+        // (or le parser 'raw' renvoie un Buffer, pas un string — la validation échouerait).
+        'application/json': {'x-parser': 'raw'},
       },
     })
     rawBody: Buffer,
