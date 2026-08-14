@@ -464,6 +464,25 @@ export class PaymentController {
           limites,
           updatedAt: new Date(),
         } as any);
+
+        // Le plan Pro inclut jusqu'à 7 comptes d'agence (voir agence.controller.ts) dont
+        // l'accès est dérivé de celui du propriétaire — sans ça, un renouvellement du
+        // propriétaire ne prolonge pas date_fin des membres, qui expirent seuls à leur
+        // date de join même si le propriétaire est resté actif tout du long.
+        if (plan === 'pro') {
+          const membres = await this.userRepo.find({where: {agence_id: transaction.user_id} as any});
+          await Promise.all(membres.map(membre => this.userRepo.updateById(membre.id!, {
+            abonnement: {
+              ...(membre as any).abonnement,
+              plan: 'pro',
+              actif: true,
+              date_fin: dateFin,
+              paiement_methode: 'agence',
+            },
+            limites,
+            updatedAt: new Date(),
+          } as any)));
+        }
       }
 
       if (transaction.type === 'boost_annonce' && transaction.bien_id) {
