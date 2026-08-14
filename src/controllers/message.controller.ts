@@ -150,7 +150,7 @@ export class MessageController {
       if (!conversationMap.has(msg.conversation_id)) {
         conversationMap.set(msg.conversation_id, msg);
       }
-      if (msg.destinataire_id === userId && !msg.lu) {
+      if (String(msg.destinataire_id) === String(userId) && !msg.lu) {
         unreadMap.set(msg.conversation_id, (unreadMap.get(msg.conversation_id) ?? 0) + 1);
       }
     }
@@ -186,7 +186,7 @@ export class MessageController {
     @param.path.string('id') id: string,
   ): Promise<void> {
     const msg = await this.messageRepository.findById(id);
-    if (msg.destinataire_id !== currentUser[securityId]) {
+    if (String(msg.destinataire_id) !== String(currentUser[securityId])) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
     await this.messageRepository.updateById(id, {lu: true, date_lecture: new Date()});

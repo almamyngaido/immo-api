@@ -151,7 +151,7 @@ export class PaymentController {
     const bien = await this.bienRepo.findById(body.bien_id).catch(() => {
       throw new HttpErrors.NotFound('Annonce introuvable.');
     });
-    if ((bien as any).courtier_id !== userId) {
+    if (String((bien as any).courtier_id) !== String(userId)) {
       throw new HttpErrors.Forbidden('Ce bien ne vous appartient pas.');
     }
 
@@ -306,7 +306,7 @@ export class PaymentController {
       throw new HttpErrors.NotFound('Transaction introuvable.');
     });
 
-    if ((transaction as any).user_id !== currentUser[securityId]) {
+    if (String((transaction as any).user_id) !== String(currentUser[securityId])) {
       throw new HttpErrors.Forbidden();
     }
 

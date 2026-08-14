@@ -115,7 +115,7 @@ export class FavoriController {
     @param.path.string('id') id: string,
   ): Promise<void> {
     const favori = await this.favoriRepo.findById(id);
-    if (favori.acheteur_id !== currentUser[securityId]) {
+    if (String(favori.acheteur_id) !== String(currentUser[securityId])) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
     await this.favoriRepo.deleteById(id);

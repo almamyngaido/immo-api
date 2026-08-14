@@ -129,7 +129,7 @@ export class DemandeContactController {
     body: {statut: string; reponse_canal?: string; date_visite_souhaitee?: string},
   ): Promise<void> {
     const demande = await this.demandeRepo.findById(id);
-    if (demande.courtier_id !== currentUser[securityId]) {
+    if (String(demande.courtier_id) !== String(currentUser[securityId])) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
 

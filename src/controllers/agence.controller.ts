@@ -232,7 +232,7 @@ export class AgenceController {
     // Vérifier que l'email correspond ou que c'est bien le bon user
     if (
       invitation.email_invite !== user.email &&
-      invitation.user_id_existant !== userId
+      String(invitation.user_id_existant) !== String(userId)
     ) {
       throw new HttpErrors.Forbidden('Cette invitation ne vous est pas destinée.');
     }
@@ -297,7 +297,7 @@ export class AgenceController {
     });
     if (!invitation) throw new HttpErrors.NotFound('Invitation introuvable.');
 
-    if (invitation.email_invite !== user.email && invitation.user_id_existant !== userId) {
+    if (invitation.email_invite !== user.email && String(invitation.user_id_existant) !== String(userId)) {
       throw new HttpErrors.Forbidden('Cette invitation ne vous est pas destinée.');
     }
 
@@ -434,7 +434,7 @@ export class AgenceController {
     const membre = await this.userRepo.findById(membreId).catch(() => {
       throw new HttpErrors.NotFound('Agent introuvable.');
     });
-    if ((membre as any).agence_id !== userId) {
+    if (String((membre as any).agence_id) !== String(userId)) {
       throw new HttpErrors.Forbidden('Cet agent n\'appartient pas à votre agence.');
     }
 
@@ -461,7 +461,7 @@ export class AgenceController {
     const inv = await this.invitationRepo.findById(invitationId).catch(() => {
       throw new HttpErrors.NotFound('Invitation introuvable.');
     });
-    if (inv.agence_id !== userId) throw new HttpErrors.Forbidden();
+    if (String(inv.agence_id) !== String(userId)) throw new HttpErrors.Forbidden();
     await this.invitationRepo.updateById(invitationId, {statut: 'refusee'} as any);
   }
 

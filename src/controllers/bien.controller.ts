@@ -177,7 +177,7 @@ export class BienController {
     const roles: string[] = (currentUser.roles as string[]) || [];
     const isAdmin = roles.some(r => String(r).toLowerCase() === 'admin');
 
-    if (!isAdmin && bien.courtier_id !== currentUser[securityId]) {
+    if (!isAdmin && String(bien.courtier_id) !== String(currentUser[securityId])) {
       throw new HttpErrors.Forbidden('Vous ne pouvez modifier que vos propres annonces.');
     }
 
@@ -225,7 +225,7 @@ export class BienController {
     body: {statut: string},
   ): Promise<void> {
     const bien = await this.bienRepository.findById(id);
-    if (bien.courtier_id !== currentUser[securityId]) {
+    if (String(bien.courtier_id) !== String(currentUser[securityId])) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
 
@@ -295,7 +295,7 @@ export class BienController {
     const roles: string[] = (currentUser.roles as string[]) || [];
     const isAdmin = roles.some(r => String(r).toLowerCase() === 'admin');
 
-    if (!isAdmin && bien.courtier_id !== currentUser[securityId]) {
+    if (!isAdmin && String(bien.courtier_id) !== String(currentUser[securityId])) {
       throw new HttpErrors.Forbidden('Non autorisé.');
     }
 
