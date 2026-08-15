@@ -144,6 +144,46 @@ class DiwaneEmailService {
     const text = `Bonjour ${prenom},\n\nVous avez rejoint l'agence ${nomAgence} sur ${APP_NAME}. Votre compte est maintenant en plan Pro.\n\nConnectez-vous à l'application Diwane pour commencer.\n\n— L'équipe ${APP_NAME}`;
     await this.send(email, `Vous avez rejoint l'agence ${nomAgence} sur ${APP_NAME}`, html, text);
   }
+
+  // ── Abonnement iOS (email + SMS) ──────────────────────────────────────────
+
+  async envoyerAbonnementIOS(
+    email: string,
+    prenom: string,
+    plan: 'premium' | 'pro',
+    lienPaiement: string,
+  ): Promise<void> {
+    const nomPlan = plan.charAt(0).toUpperCase() + plan.slice(1);
+    const prix = plan === 'premium' ? '10 000 FCFA' : '35 000 FCFA';
+    const duree = plan === 'premium'
+      ? 'Annonces illimitées, 15 photos, 5 visites 360°'
+      : 'Tout Premium inclus + Photos illimitées, 7 utilisateurs';
+
+    const html = baseTemplate(`
+      <h2>Finalisez votre abonnement ${nomPlan}</h2>
+      <p>Bonjour ${prenom},</p>
+      <p>Vous avez choisi le plan <strong>${nomPlan}</strong> (${prix}/mois) qui vous offre :</p>
+      <ul style="color:#333;line-height:2;margin:16px 0">
+        <li>✓ ${duree}</li>
+        <li>✓ Renouvellement automatique</li>
+        <li>✓ Support prioritaire</li>
+      </ul>
+      <p style="color:#888;font-size:13px;font-weight:700">Cliquez sur le bouton ci-dessous pour finaliser votre paiement :</p>
+      <div style="text-align:center"><a href="${lienPaiement}" class="btn">Confirmer mon paiement</a></div>
+      <hr class="divider">
+      <p style="font-size:13px;color:#888">Ce lien est valable 30 minutes. Une fois le paiement confirmé, votre abonnement sera activé immédiatement dans l'application.</p>
+      <p style="font-size:13px;color:#888">Des questions ? Contactez notre support depuis l'application ou répondez à cet email.</p>
+    `);
+
+    const text = `Bonjour ${prenom},\n\nVous avez choisi le plan ${nomPlan} (${prix}/mois).\n\nPour finaliser votre paiement, copiez ce lien dans votre navigateur :\n${lienPaiement}\n\nCe lien est valable 30 minutes.\n\nUne fois le paiement confirmé, votre abonnement sera activé immédiatement.\n\n— L'équipe ${APP_NAME}`;
+
+    await this.send(
+      email,
+      `Finalisez votre abonnement ${nomPlan} sur ${APP_NAME}`,
+      html,
+      text,
+    );
+  }
 }
 
 export const diwaneEmail = new DiwaneEmailService();

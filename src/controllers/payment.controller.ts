@@ -19,6 +19,8 @@ import {SecurityBindings, securityId, UserProfile} from '@loopback/security';
 import {getLimitesParPlan, Transaction} from '../models';
 import {BienRepository, TransactionRepository, UserRepository} from '../repositories';
 import {WaveService} from '../services/wave.service';
+import {diwaneEmail} from '../services/diwane-email.service';
+import {smsService} from '../services/sms.service';
 import {appLinkInterstitialHtml, webAppUrl} from '../utils/app-link.utils';
 
 function genRef(prefix: string, id: string): string {
@@ -43,10 +45,10 @@ export class PaymentController {
 
   @authenticate('jwt')
   @post('/api/payments/abonnement/initier', {
-    summary: '[Diwane] Initier un paiement d\'abonnement Wave',
+    summary: '[Diwane] Initier un paiement d\'abonnement (Wave pour Android/Web, Email+SMS pour iOS)',
     responses: {
       '200': {
-        description: 'Session Wave créée',
+        description: 'Session créée (Wave ou iOS pending)',
         content: {
           'application/json': {
             schema: {
@@ -55,6 +57,7 @@ export class PaymentController {
                 checkout_url:   {type: 'string'},
                 transaction_id: {type: 'string'},
                 reference:      {type: 'string'},
+                message:        {type: 'string'},
               },
             },
           },
@@ -70,14 +73,19 @@ export class PaymentController {
           schema: {
             type: 'object',
             required: ['plan'],
-            properties: {plan: {type: 'string', enum: ['premium', 'pro']}},
+            properties: {
+              plan:  {type: 'string', enum: ['premium', 'pro']},
+              email: {type: 'string'},
+              phone: {type: 'string'},
+            },
           },
         },
       },
     })
-    body: {plan: 'premium' | 'pro'},
+    body: {plan: 'premium' | 'pro'; email?: string; phone?: string},
     @inject(SecurityBindings.USER) currentUser: UserProfile,
-  ): Promise<{checkout_url: string; transaction_id: string; reference: string}> {
+    @inject(RestBindings.Http.REQUEST) req: Request,
+  ): Promise<any> {
     const userId = currentUser[securityId];
     const courtier = await this.userRepo.findById(userId);
 
@@ -85,8 +93,93 @@ export class PaymentController {
       throw new HttpErrors.Forbidden('Réservé aux courtiers.');
     }
 
-    // TODO(test-wave): remettre {premium: 10000, pro: 35000} après les tests de paiement réel.
-    const montants: Record<string, number> = {premium: 20, pro: 50};
+    const platform = (req.headers['x-platform'] as string ?? '').toLowerCase();
+
+    // iOS → Email + SMS
+    if (platform === 'ios') {
+      return await this._initierAbonnementIOS(body, courtier);
+    }
+
+    // Android/Web → Wave (existant)
+    return await this._initierAbonnementWave(body, courtier);
+  }
+
+  // ── Flux iOS : Email + SMS ──────────────────────────────────────────────────
+  private async _initierAbonnementIOS(
+    body: {plan: 'premium' | 'pro'; email?: string; phone?: string},
+    courtier: any,
+  ): Promise<{transaction_id: string; message: string}> {
+    const userId = courtier.id;
+    const montants: Record<string, number> = {premium: 10000, pro: 35000};
+    const montant = montants[body.plan];
+
+    // Utiliser email/phone du body ou fallback sur l'utilisateur
+    const email = body.email ?? courtier.email;
+    const phone = body.phone ?? courtier.telephone;
+
+    // Vérifier s'il y a déjà une transaction en attente
+    const pending = await this._transactionPendanteRecente({
+      user_id: userId,
+      type: `abonnement_${body.plan}`,
+      statut: {inq: ['pending_payment', 'initiee']},
+    });
+    if (pending) {
+      return {
+        transaction_id: pending.id!,
+        message: 'Email et SMS déjà envoyés pour cette souscription',
+      };
+    }
+
+    // Créer la transaction
+    const transaction = await this.transactionRepo.create({
+      user_id: userId,
+      type: `abonnement_${body.plan}`,
+      montant_fcfa: montant,
+      methode: 'external_payment',
+      numero_paiement: phone,
+      abonnement_plan: body.plan,
+      statut: 'pending_payment',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      date_expiration_service: new Date(Date.now() + 30 * 86400000),
+    } as any);
+
+    // Lien de paiement (à remplacer par l'URL réelle du provider)
+    const lienPaiement = `${process.env.EXTERNAL_PAYMENT_URL ?? 'https://paiement.diwane.sn'}/pay/${transaction.id}`;
+
+    // Envoyer EMAIL
+    try {
+      await diwaneEmail.envoyerAbonnementIOS(
+        email,
+        courtier.prenom ?? courtier.nom ?? 'Utilisateur',
+        body.plan,
+        lienPaiement,
+      );
+    } catch (e) {
+      console.error('[Payment] Erreur envoi email iOS:', e);
+    }
+
+    // Envoyer SMS
+    try {
+      const smsMessage = `Diwane: Finalisez votre abonnement ${body.plan} ici: ${lienPaiement}`;
+      await smsService.envoyerSMS(phone, smsMessage, 'subscription');
+    } catch (e) {
+      console.error('[Payment] Erreur envoi SMS iOS:', e);
+    }
+
+    return {
+      transaction_id: transaction.id!,
+      message: 'Email et SMS envoyés pour finaliser votre paiement',
+    };
+  }
+
+  // ── Flux Wave : Android/Web (existant) ──────────────────────────────────────
+  private async _initierAbonnementWave(
+    body: {plan: 'premium' | 'pro'},
+    courtier: any,
+  ): Promise<{checkout_url: string; transaction_id: string; reference: string}> {
+    const userId = courtier.id;
+    const montants: Record<string, number> = {premium: 10000, pro: 35000};
     const montant = montants[body.plan];
 
     const pending = await this._transactionPendanteRecente({
@@ -95,31 +188,31 @@ export class PaymentController {
     });
     if (pending) {
       return {
-        checkout_url:   pending.checkout_url!,
+        checkout_url: pending.checkout_url!,
         transaction_id: pending.id!,
-        reference:      pending.reference_externe!,
+        reference: pending.reference_externe!,
       };
     }
 
     const reference = genRef('SUB', userId);
 
     const transaction = await this.transactionRepo.create({
-      user_id:    userId,
-      type:       `abonnement_${body.plan}`,
+      user_id: userId,
+      type: `abonnement_${body.plan}`,
       montant_fcfa: montant,
-      methode:    'wave',
+      methode: 'wave',
       numero_paiement: courtier.telephone,
       abonnement_plan: body.plan,
-      statut:     'initiee',
+      statut: 'initiee',
       reference_externe: reference,
-      createdAt:  new Date(),
-      updatedAt:  new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
       date_expiration_service: new Date(Date.now() + 30 * 86400000),
     } as any);
 
     const {checkout_url, wave_session_id} = await this.waveService.creerCheckoutSession({
       montant_fcfa: montant,
-      description:  `Abonnement Diwane ${body.plan.charAt(0).toUpperCase() + body.plan.slice(1)} — 1 mois`,
+      description: `Abonnement Diwane ${body.plan.charAt(0).toUpperCase() + body.plan.slice(1)} — 1 mois`,
       reference,
       transaction_id: transaction.id!,
       telephone_client: courtier.telephone,
@@ -237,63 +330,32 @@ export class PaymentController {
     return {checkout_url, transaction_id: transaction.id!, reference};
   }
 
-  // ── POST /api/webhooks/wave ───────────────────────────────────────────────────
-
+  // ── POST /api/webhooks/wave (LEGACY) ──────────────────────────────────────────
+  // Redirige vers le webhook unifié pour backward compatibility
   @post('/api/webhooks/wave', {
-    summary: '[Diwane] Webhook Wave (paiement confirmé/échoué)',
+    summary: '[Diwane][LEGACY] Webhook Wave (redirige vers /webhooks/payment)',
     responses: {'200': {description: 'OK'}},
   })
   async webhookWave(
     @requestBody({
       content: {
-        // Pas de schéma déclaré : LoopBack valide via AJV contre le schéma sinon
-        // (or le parser 'raw' renvoie un Buffer, pas un string — la validation échouerait).
         'application/json': {'x-parser': 'raw'},
       },
     })
     rawBody: Buffer,
     @inject(RestBindings.Http.REQUEST) req: Request,
   ): Promise<{received: boolean}> {
-    // Valider la signature Wave sur les octets bruts exacts reçus (pas une re-sérialisation)
+    // Valider la signature Wave
     const signature = req.headers['wave-signature'] as string ?? '';
     const rawPayload = rawBody.toString('utf8');
-    const body = JSON.parse(rawPayload);
 
-    // Le secret n'étant pas encore configuré partout, on ne bloque que s'il est présent :
-    // dès que WAVE_WEBHOOK_SECRET est renseigné (même hors prod), une signature invalide est rejetée.
     if (process.env.WAVE_WEBHOOK_SECRET && !this.waveService.validerSignatureWebhook(rawPayload, signature)) {
       throw new HttpErrors.Unauthorized('Signature Wave invalide.');
     }
 
-    const sessionId = body?.data?.id ?? body?.id;
-    if (!sessionId) return {received: true};
-
-    const transactions = await this.transactionRepo.find({
-      where: {wave_checkout_id: sessionId} as any,
-    });
-
-    if (!transactions.length) {
-      console.warn(`[Wave Webhook] transaction non trouvée pour session ${sessionId}`);
-      return {received: true}; // Toujours 200 pour éviter les retries Wave
-    }
-
-    const transaction = transactions[0];
-    const paymentStatus = body?.data?.payment_status ?? body?.payment_status;
-    const isSuccess = paymentStatus === 'succeeded' ||
-      body?.type === 'checkout.session.completed';
-
-    await this.transactionRepo.updateById(transaction.id!, {
-      statut:         isSuccess ? 'succes' : 'echec',
-      date_paiement:  isSuccess ? new Date() : undefined,
-      webhook_payload: body,
-      updatedAt:      new Date(),
-    } as any);
-
-    if (isSuccess) {
-      await this._confirmerPaiement(transaction);
-    }
-
-    return {received: true};
+    // Réutilise la logique du webhook unifié
+    req.headers['x-payment-provider'] = 'wave';
+    return await this.webhookPayment(Buffer.from(rawPayload), req);
   }
 
   // ── GET /api/payments/wave/success ────────────────────────────────────────────
@@ -392,6 +454,157 @@ export class PaymentController {
     };
   }
 
+  // ── POST /api/webhooks/payment (webhook unifié pour tous les providers) ────
+
+  @post('/api/webhooks/payment', {
+    summary: '[Diwane] Webhook paiement unifié (Wave, Stripe, PayPal, etc.)',
+    responses: {'200': {description: 'OK'}},
+  })
+  async webhookPayment(
+    @requestBody({
+      content: {
+        'application/json': {'x-parser': 'raw'},
+      },
+    })
+    rawBody: Buffer,
+    @inject(RestBindings.Http.REQUEST) req: Request,
+  ): Promise<{received: boolean}> {
+    const rawPayload = rawBody.toString('utf8');
+    const body = JSON.parse(rawPayload);
+
+    // Identifier le provider
+    const provider = (req.headers['x-payment-provider'] as string ?? 'wave').toLowerCase();
+
+    // Trouver la transaction selon le provider
+    let transaction;
+
+    if (provider === 'wave') {
+      // Wave: chercher par wave_checkout_id
+      const sessionId = body?.data?.id ?? body?.id;
+      if (!sessionId) return {received: true};
+
+      const transactions = await this.transactionRepo.find({
+        where: {wave_checkout_id: sessionId} as any,
+      });
+
+      if (!transactions.length) {
+        console.warn(`[Webhook] transaction non trouvée pour session Wave ${sessionId}`);
+        return {received: true};
+      }
+      transaction = transactions[0];
+    } else {
+      // Autres providers (Stripe, PayPal, iOS): chercher par transaction_id
+      const transactionId = body?.metadata?.transaction_id ?? body?.transaction_id;
+      if (!transactionId) return {received: true};
+
+      transaction = await this.transactionRepo.findById(transactionId).catch(() => {
+        console.warn(`[Webhook] transaction non trouvée pour ID ${transactionId}`);
+        return null;
+      });
+
+      if (!transaction) return {received: true};
+    }
+
+    // Vérifier le succès selon le provider
+    const isSuccess = this._checkPaymentSuccess(body, provider);
+
+    // Mettre à jour la transaction
+    await this.transactionRepo.updateById(transaction.id!, {
+      statut: isSuccess ? 'succes' : 'echec',
+      date_paiement: isSuccess ? new Date() : undefined,
+      webhook_payload: body,
+      updatedAt: new Date(),
+    } as any);
+
+    // Confirmer le paiement si succès
+    if (isSuccess) {
+      await this._confirmerPaiement(transaction);
+    }
+
+    console.log(`[Webhook ${provider}] transaction ${transaction.id} → ${isSuccess ? 'succes' : 'echec'}`);
+    return {received: true};
+  }
+
+  // ── GET /api/payments/ios-success (redirect après paiement via lien email) ───
+  // Endpoint pour redirection depuis le lien de paiement dans l'email/SMS
+  @get('/api/payments/ios-success', {
+    summary: '[Diwane] Redirect iOS après paiement (depuis lien email/SMS)',
+    responses: {'200': {description: 'HTML avec deep link'}},
+  })
+  async confirmPaymentIOSRedirect(
+    @param.query.string('transactionId') transactionId: string,
+    @param.query.string('status') status: string,
+    @inject(RestBindings.Http.RESPONSE) res: Response,
+  ): Promise<void> {
+    if (!transactionId) {
+      throw new HttpErrors.BadRequest('transactionId manquant');
+    }
+
+    const transaction = await this.transactionRepo.findById(transactionId).catch(() => {
+      throw new HttpErrors.NotFound('Transaction introuvable.');
+    });
+
+    if (status === 'success') {
+      // Confirmer le paiement
+      await this.transactionRepo.updateById(transaction.id!, {
+        statut: 'succes',
+        date_paiement: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await this._confirmerPaiement(transaction);
+
+      // Retourner un deep link pour l'app
+      const deepLink = `diwane://subscription/success?transactionId=${transaction.id}&plan=${(transaction as any).abonnement_plan}`;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(appLinkInterstitialHtml({
+        appUrl: deepLink,
+        webUrl: webAppUrl(`/payment-result?status=success&transactionId=${encodeURIComponent(transactionId)}`),
+      }));
+    } else {
+      // Marquer comme échoué
+      await this.transactionRepo.updateById(transaction.id!, {
+        statut: 'echec',
+        updatedAt: new Date(),
+      } as any);
+
+      const deepLink = `diwane://subscription/failed?transactionId=${transaction.id}`;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(appLinkInterstitialHtml({
+        appUrl: deepLink,
+        webUrl: webAppUrl(`/payment-result?status=failed&transactionId=${encodeURIComponent(transactionId)}`),
+      }));
+    }
+  }
+
+  // ── POST /api/payments/ios-confirm/:transactionId (DEV ONLY) ────────────────
+
+  @post('/api/payments/ios-confirm/{transactionId}', {
+    summary: '[Diwane][DEV] Confirmer manuellement un paiement iOS (dev/test)',
+    responses: {'200': {description: 'OK'}},
+  })
+  async confirmPaymentIOSManual(
+    @param.path.string('transactionId') transactionId: string,
+  ): Promise<{ok: boolean}> {
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEV_PAYMENTS !== 'true') {
+      throw new HttpErrors.Forbidden('Endpoint dev non disponible en production');
+    }
+
+    const transaction = await this.transactionRepo.findById(transactionId).catch(() => {
+      throw new HttpErrors.NotFound('Transaction introuvable.');
+    });
+
+    await this.transactionRepo.updateById(transaction.id!, {
+      statut: 'succes',
+      date_paiement: new Date(),
+      updatedAt: new Date(),
+    } as any);
+
+    await this._confirmerPaiement(transaction);
+
+    return {ok: true};
+  }
+
   // ── POST /api/payments/test/confirmer/:transactionId  (DEV uniquement) ──────────
 
   @authenticate('jwt')
@@ -439,6 +652,24 @@ export class PaymentController {
     throw new HttpErrors.NotFound('Transaction introuvable.');
   }
 
+  // ── Helper: Vérifier le succès du paiement selon le provider ───────────────
+
+  private _checkPaymentSuccess(body: any, provider: string = 'wave'): boolean {
+    switch (provider) {
+      case 'wave':
+        return body?.data?.payment_status === 'succeeded' ||
+          body?.type === 'checkout.session.completed';
+      case 'stripe':
+        return body?.type === 'checkout.session.completed' ||
+          body?.data?.object?.payment_status === 'paid';
+      case 'paypal':
+        return body?.event_type === 'CHECKOUT.ORDER.COMPLETED' &&
+          body?.resource?.status === 'COMPLETED';
+      default:
+        return body?.status === 'succeeded';
+    }
+  }
+
   // ── Activer le service après paiement confirmé ────────────────────────────────
 
   private async _confirmerPaiement(transaction: any): Promise<void> {
@@ -457,7 +688,7 @@ export class PaymentController {
             prix_fcfa: transaction.montant_fcfa,
             date_debut: dateDebut,
             date_fin: dateFin,
-            paiement_methode: 'wave',
+            paiement_methode: transaction.methode, // Utilise la vraie méthode (wave, stripe, external_payment, etc.)
             transaction_id: transaction.id,
           },
           badges: {...(user.badges as any), premium: true},
