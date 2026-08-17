@@ -6,6 +6,7 @@ import {
   response,
   ResponseObject,
 } from '@loopback/rest';
+import * as https from 'https';
 
 /**
  * OpenAPI response for ping()
@@ -51,5 +52,21 @@ export class PingController {
       url: this.req.url,
       headers: Object.assign({}, this.req.headers),
     };
+  }
+
+  // Railway n'a pas d'IP sortante fixe sur ce plan — elle tourne à chaque déploiement/restart.
+  // Cette route sert à relever l'IP courante pour la mettre à jour dans la whitelist Wave.
+  // À retirer seulement après la migration vers un VPS à IP fixe.
+  @get('/api/debug/outbound-ip')
+  outboundIp(): Promise<{outbound_ip: string}> {
+    return new Promise((resolve, reject) => {
+      https
+        .get('https://api.ipify.org', res => {
+          let ip = '';
+          res.on('data', chunk => (ip += chunk));
+          res.on('end', () => resolve({outbound_ip: ip}));
+        })
+        .on('error', reject);
+    });
   }
 }
