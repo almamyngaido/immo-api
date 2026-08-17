@@ -281,7 +281,8 @@ export class PaymentController {
       throw new HttpErrors.Forbidden('Ce bien ne vous appartient pas.');
     }
 
-    const tarifs: Record<number, number> = {3: 5000, 7: 10000, 14: 18000, 30: 35000};
+    // TODO(test-wave): remettre {3: 5000, 7: 10000, 14: 18000, 30: 35000} après les tests de paiement réel.
+    const tarifs: Record<number, number> = {3: 20, 7: 30, 14: 40, 30: 50};
     const montant = tarifs[body.duree_jours];
     if (!montant) throw new HttpErrors.BadRequest('Durée invalide. Choisir 3, 7, 14 ou 30 jours.');
 
