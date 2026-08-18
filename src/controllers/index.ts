@@ -17,7 +17,6 @@ export * from './alerte-recherche.controller';
 export * from './demande-contact.controller';
 export * from './avis.controller';
 export * from './favori.controller';
-export * from './message.controller';
 
 // ─── Utilitaires conservés ────────────────────────────────────────────────────
 export * from './file-upload.controller';
@@ -38,5 +37,4 @@ export * from './utilisateur-bien-immo.controller';
 export * from './utilisateur-panier.controller';
 export * from './utilisateur-role.controller';
 export * from './utilisateur.controller';
-export * from './conversation.controller';
 

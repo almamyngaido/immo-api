@@ -6,7 +6,6 @@ export * from './demande-contact.repository';
 export * from './avis.repository';
 export * from './transaction.repository';
 export * from './favori.repository';
-export * from './message.repository';
 export * from './invitation-agence.repository';
 export * from './refresh-token.repository';
 
@@ -19,4 +18,3 @@ export * from './role.repository';
 export * from './utilisateur-role.repository';
 export * from './utilisateur.repository';
 export * from './media.repository';
-export * from './conversation.repository';
